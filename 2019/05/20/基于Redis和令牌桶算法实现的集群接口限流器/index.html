@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+<html class="theme-next gemini use-motion" lang="zh-CN">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="google-site-verification" content="B_-GnVKUvxYBHy5tn4KkWgU7zQ7dEe2yErzV80zpWqo">
+<meta name="baidu-site-verification" content="ozTHxfAj4T">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2">
+
+<link rel="stylesheet" href="/css/main.css?v=6.7.0">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=6.7.0">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=6.7.0">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=6.7.0">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=6.7.0" color="#222">
+
+
+
+
+
+
+
+<script id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Gemini',
+    version: '6.7.0',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: false,
+    fastclick: false,
+    lazyload: false,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+  
+
+
+
+
+  <meta name="description" content="任何系统的性能都有一个上限，当并发量超过这个上限之后，可1能会对系统造成毁灭性地打击。因此在任何时刻我们都必须保证系统的并发请求数量不能超过某个阈值，限流就是为了完成这一目的。本限流器是基于Redis记录流量数据，实现对接口的精准限流，保证系统的稳定运行。 1 令牌桶算法该限流器采用流行的令牌桶算法，现简单讲解令牌桶算法的原理 1.1 简介令牌桶算法最初来源于计算机网络。在网络传输数据时，为了防止">
+<meta name="keywords" content="Redis,限流,令牌桶">
+<meta property="og:type" content="article">
+<meta property="og:title" content="基于Redis和令牌桶算法实现的集群接口限流器">
+<meta property="og:url" content="https://zhuangyongxin.github.io/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/index.html">
+<meta property="og:site_name" content="Vincent Blogs">
+<meta property="og:description" content="任何系统的性能都有一个上限，当并发量超过这个上限之后，可1能会对系统造成毁灭性地打击。因此在任何时刻我们都必须保证系统的并发请求数量不能超过某个阈值，限流就是为了完成这一目的。本限流器是基于Redis记录流量数据，实现对接口的精准限流，保证系统的稳定运行。 1 令牌桶算法该限流器采用流行的令牌桶算法，现简单讲解令牌桶算法的原理 1.1 简介令牌桶算法最初来源于计算机网络。在网络传输数据时，为了防止">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="https://zhuangyongxin.github.io/images/token-bucket.png">
+<meta property="og:updated_time" content="2019-05-21T01:53:03.696Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="基于Redis和令牌桶算法实现的集群接口限流器">
+<meta name="twitter:description" content="任何系统的性能都有一个上限，当并发量超过这个上限之后，可1能会对系统造成毁灭性地打击。因此在任何时刻我们都必须保证系统的并发请求数量不能超过某个阈值，限流就是为了完成这一目的。本限流器是基于Redis记录流量数据，实现对接口的精准限流，保证系统的稳定运行。 1 令牌桶算法该限流器采用流行的令牌桶算法，现简单讲解令牌桶算法的原理 1.1 简介令牌桶算法最初来源于计算机网络。在网络传输数据时，为了防止">
+<meta name="twitter:image" content="https://zhuangyongxin.github.io/images/token-bucket.png">
+
+
+
+
+
+
+  <link rel="canonical" href="https://zhuangyongxin.github.io/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/">
+
+
+
+<script id="page.configurations">
+  CONFIG.page = {
+    sidebar: "",
+  };
+</script>
+
+  <title>基于Redis和令牌桶算法实现的集群接口限流器 | Vincent Blogs</title>
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .motion-element,
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-title { opacity: initial; }
+
+  .use-motion .logo,
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope="" itemtype="http://schema.org/WebPage" lang="zh-CN">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Vincent Blogs</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+    
+      
+        <p class="site-subtitle">Keep hungry, Keep foolish</p>
+      
+    
+    
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="切换导航栏">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  
+    <ul id="menu" class="menu">
+      
+        
+        
+        
+          
+          <li class="menu-item menu-item-home">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/" rel="section"><i class="menu-item-icon fa fa-fw fa-home"></i> <br>首页</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-categories">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/categories/" rel="section"><i class="menu-item-icon fa fa-fw fa-th"></i> <br>分类</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-tags">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/tags/" rel="section"><i class="menu-item-icon fa fa-fw fa-tags"></i> <br>标签</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-archives">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/archives/" rel="section"><i class="menu-item-icon fa fa-fw fa-archive"></i> <br>归档</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-about">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/about/" rel="section"><i class="menu-item-icon fa fa-fw fa-user"></i> <br>关于</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-sitemap">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/sitemap.xml" rel="section"><i class="menu-item-icon fa fa-fw fa-sitemap"></i> <br>站点地图</a>
+
+  </li>
+
+      
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br>搜索</a>
+        </li>
+      
+    </ul>
+  
+
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocomplete="off" placeholder="搜索..." spellcheck="false" type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+  
+
+
+
+</div>
+    </header>
+
+    
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+            
+
+          
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Vincent Zhuang">
+      <meta itemprop="description" content="专注于后端的技术博客">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Vincent Blogs">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">基于Redis和令牌桶算法实现的集群接口限流器
+
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+
+              
+                
+              
+
+              <time title="创建时间：2019-05-20 20:00:00" itemprop="dateCreated datePublished" datetime="2019-05-20T20:00:00+08:00">2019-05-20</time>
+            
+
+            
+              
+
+              
+                
+                <span class="post-meta-divider">|</span>
+                
+
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-calendar-check-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">更新于</span>
+                
+                <time title="修改时间：2019-05-21 09:53:03" itemprop="dateModified" datetime="2019-05-21T09:53:03+08:00">2019-05-21</time>
+              
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope="" itemtype="http://schema.org/Thing"><a href="/categories/常用组件/" itemprop="url" rel="index"><span itemprop="name">常用组件</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+             <span id="/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/" class="leancloud_visitors" data-flag-title="基于Redis和令牌桶算法实现的集群接口限流器">
+               <span class="post-meta-divider">|</span>
+               <span class="post-meta-item-icon">
+                 <i class="fa fa-eye"></i>
+               </span>
+               
+                 <span class="post-meta-item-text">阅读次数：</span>
+               
+                 <span class="leancloud-visitors-count"></span>
+             </span>
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>任何系统的性能都有一个上限，当并发量超过这个上限之后，可1能会对系统造成毁灭性地打击。因此在任何时刻我们都必须保证系统的并发请求数量不能超过某个阈值，限流就是为了完成这一目的。本限流器是基于Redis记录流量数据，实现对接口的精准限流，保证系统的稳定运行。</p>
+<h1 id="1-令牌桶算法"><a href="#1-令牌桶算法" class="headerlink" title="1 令牌桶算法"></a>1 令牌桶算法</h1><p>该限流器采用流行的令牌桶算法，现简单讲解令牌桶算法的原理</p>
+<h2 id="1-1-简介"><a href="#1-1-简介" class="headerlink" title="1.1 简介"></a>1.1 简介</h2><p>令牌桶算法最初来源于计算机网络。在网络传输数据时，为了防止网络拥塞，需限制流出网络的流量，使流量以比较均匀的速度向外发送。令牌桶算法就实现了这个功能，可控制发送到网络上数据的数目，并允许突发数据的发送。</p>
+<p>令牌桶算法是网络流量整形（Traffic Shaping）和速率限制（Rate Limiting）中最常使用的一种算法。典型情况下，令牌桶算法用来控制发送到网络上的数据的数目，并允许突发数据的发送。</p>
+<p>大小固定的令牌桶可自行以恒定的速率源源不断地产生令牌。如果令牌不被消耗，或者被消耗的速度小于产生的速度，令牌就会不断地增多，直到把桶填满。后面再产生的令牌就会从桶中溢出。最后桶中可以保存的最大令牌数永远不会超过桶的大小。</p>
+<p>传送到令牌桶的数据包需要消耗令牌。不同大小的数据包，消耗的令牌数量不一样。令牌桶这种控制机制基于令牌桶中是否存在令牌来指示什么时候可以发送流量。令牌桶中的每一个令牌都代表一个字节。如果令牌桶中存在令牌，则允许发送流量；而如果令牌桶中不存在令牌，则不允许发送流量。因此，如果突发门限被合理地配置并且令牌桶中有足够的令牌，那么流量就可以以峰值速率发送。</p>
+<h2 id="1-2-算法过程"><a href="#1-2-算法过程" class="headerlink" title="1.2 算法过程"></a>1.2 算法过程</h2><p><img src="/images/token-bucket.png" alt=""><br>算法描述：</p>
+<ul>
+<li>假如用户配置的平均发送速率为r，则每隔1/r秒一个令牌被加入到桶中（每秒会有r个令牌放入桶中）；</li>
+<li>假设桶中最多可以存放b个令牌。如果令牌到达时令牌桶已经满了，那么这个令牌会被丢弃；</li>
+<li>当一个n个字节的数据包到达时，就从令牌桶中删除n个令牌（不同大小的数据包，消耗的令牌数量不一样），并且数据包被发送到网络；</li>
+<li>如果令牌桶中少于n个令牌，那么不会删除令牌，并且认为这个数据包在流量限制之外（n个字节，需要n个令牌。该数据包将被缓存或丢弃）；</li>
+<li>算法允许最长b个字节的突发，但从长期运行结果看，数据包的速率被限制成常量r。对于在流量限制外的数据包可以以不同的方式处理：（1）它们可以被丢弃；（2）它们可以排放在队列中以便当令牌桶中累积了足够多的令牌时再传输；（3）它们可以继续发送，但需要做特殊标记，网络过载的时候将这些特殊标记的包丢弃。</li>
+</ul>
+<h1 id="2-实现原理"><a href="#2-实现原理" class="headerlink" title="2 实现原理"></a>2 实现原理</h1><p>本限流器主要是基于令牌桶思想，并将令牌数存储到Redis中，实现在集群模式下对接口的精准限流，实现思想如下：</p>
+<ul>
+<li>对于每个限流接口，记录最大存储令牌数maxPermits， 当前存储令牌数storedPermits， 添加令牌时间间隔intervalMillis， 下次请求可以获取令牌的起始时间nextFreeTicketMillis，这些信息都记录在Redis中</li>
+<li>响应本次请求之后，动态计算下一次可以服务的时间，如果下一次请求在这个时间之前则需要进行等待。 nextFreeTicketMicros 记录下一次可以响应的时间。例如，如果我们设置QPS为1，本次请求处理完之后，那么下一次最早的能够响应请求的时间一秒钟之后。</li>
+<li>限流器支持处理突发流量请求，突发请求允许个数就是最大存储令牌数maxPermits。例如，我们设置QPS为1，在十秒钟之内没有请求，那么令牌桶中会有10个（假设设置的maxPermits为10）空闲令牌，如果下一次请求是 10个令牌，则可以一次性获取10个令牌，因为令牌桶中已经有10个空闲的令牌。 storedPermits 就是用来表示当前令牌桶中的空闲令牌数。</li>
+<li>对于令牌的产生有两种方式，一种是通过后台定时任务来不断产生令牌，一种是延迟生成，在每次获取令牌之前先计算在nextFreeTicketMillis到目前这个时间段内应该产生多少令牌，并更新令牌桶。本限流器采用的是后者。</li>
+</ul>
+<h1 id="3-具体实现"><a href="#3-具体实现" class="headerlink" title="3 具体实现"></a>3 具体实现</h1><h2 id="3-1-令牌桶"><a href="#3-1-令牌桶" class="headerlink" title="3.1 令牌桶"></a>3.1 令牌桶</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Redis令牌桶</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="meta">@Data</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RedisPermits</span> <span class="keyword">implements</span> <span class="title">Serializable</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">long</span> serialVersionUID = <span class="number">1L</span>;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * maxPermits 最大存储令牌数</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long maxPermits;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * storedPermits 当前存储令牌数</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long storedPermits;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * intervalMillis 添加令牌时间间隔</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long intervalMillis;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * nextFreeTicketMillis 下次请求可以获取令牌的起始时间，默认当前系统时间</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long nextFreeTicketMillis;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> permitsPerSecond 每秒放入的令牌数</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> maxBurstSeconds  maxPermits由此字段计算，最大存储maxBurstSeconds秒生成的令牌</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">RedisPermits</span><span class="params">(Double permitsPerSecond, Integer maxBurstSeconds)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">null</span> == maxBurstSeconds) &#123;</span><br><span class="line">            maxBurstSeconds = <span class="number">60</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">this</span>.maxPermits = (<span class="keyword">long</span>) (permitsPerSecond * maxBurstSeconds);</span><br><span class="line">        <span class="keyword">this</span>.storedPermits = permitsPerSecond.longValue();</span><br><span class="line">        <span class="keyword">this</span>.intervalMillis = (<span class="keyword">long</span>) (TimeUnit.SECONDS.toMillis(<span class="number">1</span>) / permitsPerSecond);</span><br><span class="line">        <span class="keyword">this</span>.nextFreeTicketMillis = System.currentTimeMillis();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * redis的过期时长</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Long <span class="title">expires</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">long</span> now = System.currentTimeMillis();</span><br><span class="line">        <span class="keyword">return</span> <span class="number">2</span> * TimeUnit.MINUTES.toSeconds(<span class="number">1</span>)</span><br><span class="line">                + TimeUnit.MILLISECONDS.toSeconds(Math.max(nextFreeTicketMillis, now) - now);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Map&lt;String, String&gt; <span class="title">toMap</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        Map&lt;String, String&gt; resultMap = <span class="keyword">new</span> HashMap&lt;&gt;();</span><br><span class="line">        resultMap.put(<span class="string">"maxPermits"</span>, maxPermits.toString());</span><br><span class="line">        resultMap.put(<span class="string">"storedPermits"</span>, storedPermits.toString());</span><br><span class="line">        resultMap.put(<span class="string">"intervalMillis"</span>, intervalMillis.toString());</span><br><span class="line">        resultMap.put(<span class="string">"nextFreeTicketMillis"</span>, nextFreeTicketMillis.toString());</span><br><span class="line">        <span class="keyword">return</span> resultMap;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+<p>该类主要存储了令牌桶核心的四个参数</p>
+<h2 id="3-2-限流器"><a href="#3-2-限流器" class="headerlink" title="3.2 限流器"></a>3.2 限流器</h2><p>主要方法：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Slf</span>4j</span><br><span class="line"><span class="meta">@Data</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RateLimiter</span> </span>&#123;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 在超时时间内尝试获取&#123;tokenCount&#125;个令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> timeout</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> timeUnit</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     * <span class="doctag">@throws</span> InterruptedException</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">tryAcquire</span><span class="params">(Long tokenCount, Long timeout, TimeUnit timeUnit)</span> <span class="keyword">throws</span> InterruptedException</span>&#123;</span><br><span class="line">        <span class="keyword">if</span>(checkTokens(tokenCount)) &#123;</span><br><span class="line">            Long timeoutMillis = Math.max(timeUnit.toMillis(timeout), <span class="number">0</span>);</span><br><span class="line">            Long millisToWait = tryAndGetWaitTime(tokenCount, timeoutMillis);</span><br><span class="line">            <span class="keyword">if</span>(millisToWait &lt;= timeoutMillis) &#123;</span><br><span class="line">                log.info(<span class="string">"tryAcquire for &#123;&#125;ms &#123;&#125;"</span>, millisToWait, Thread.currentThread().getName());</span><br><span class="line">                Thread.sleep(millisToWait);</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 等待直到获取指定数量的令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     * <span class="doctag">@throws</span> InterruptedException</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Long <span class="title">acquire</span><span class="params">(Long tokenCount)</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">        <span class="keyword">long</span> milliToWait = <span class="keyword">this</span>.reserve(tokenCount);</span><br><span class="line">        log.info(<span class="string">"acquire for &#123;&#125;ms &#123;&#125;"</span>, milliToWait, Thread.currentThread().getName());</span><br><span class="line">        Thread.sleep(milliToWait);</span><br><span class="line">        <span class="keyword">return</span> milliToWait;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 获取令牌n个需要等待的时间</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> <span class="keyword">long</span> <span class="title">reserve</span><span class="params">(Long tokenCount)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (checkTokens(tokenCount)) &#123;</span><br><span class="line">            <span class="keyword">return</span> reserveAndGetWaitTime(tokenCount);</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 预定@&#123;tokenCount&#125;个令牌并返回所需要等待的时间</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> Long <span class="title">reserveAndGetWaitTime</span><span class="params">(Long tokenCount)</span></span>&#123;</span><br><span class="line">        putDefaultPermits();</span><br><span class="line">        String script = <span class="string">"redis.replicate_commands() "</span> +</span><br><span class="line">                <span class="string">"local redisKey = KEYS[1] "</span> +</span><br><span class="line">                <span class="string">"local timeStrArray = redis.call('time') "</span> +</span><br><span class="line">                <span class="string">"local seconds = tonumber(timeStrArray[1]) "</span> +</span><br><span class="line">                <span class="string">"local microseconds = tonumber(timeStrArray[2]) "</span> +</span><br><span class="line">                <span class="string">"local nowMilliseconds = seconds * 1000 + math.modf(microseconds/1000) "</span> +</span><br><span class="line">                <span class="string">"local redisPermitsValues = redis.call('hmget', redisKey, 'nextFreeTicketMillis', 'maxPermits', 'storedPermits', 'intervalMillis') "</span> +</span><br><span class="line">                <span class="string">"local nextFreeTicketMillis = tonumber(redisPermitsValues[1]) "</span> +</span><br><span class="line">                <span class="string">"local maxPermits = tonumber(redisPermitsValues[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermits = tonumber(redisPermitsValues[3]) "</span> +</span><br><span class="line">                <span class="string">"local intervalMillis = tonumber(redisPermitsValues[4]) "</span> +</span><br><span class="line">                <span class="string">"if(nowMilliseconds &gt; nextFreeTicketMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"storedPermits = math.min(maxPermits, storedPermits + math.modf((nowMilliseconds - nextFreeTicketMillis) / intervalMillis)) "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"local tokenCount = tonumber(ARGV[1]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermitsToSpend = math.min(tokenCount, storedPermits) "</span> +</span><br><span class="line">                <span class="string">"local freshPermits = tokenCount - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"local waitMillis = freshPermits * intervalMillis "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nextFreeTicketMillis + waitMillis "</span> +</span><br><span class="line">                <span class="string">"storedPermits = storedPermits - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"redis.call('hmset', redisKey, 'nextFreeTicketMillis', nextFreeTicketMillis, 'storedPermits', storedPermits) "</span> +</span><br><span class="line">                <span class="string">"redis.call('expire', redisKey, 120) "</span> +</span><br><span class="line">                <span class="string">"return nextFreeTicketMillis - nowMilliseconds"</span>;</span><br><span class="line">        List&lt;String&gt; keys = Collections.singletonList(key);</span><br><span class="line">        List&lt;String&gt; args = Collections.singletonList(tokenCount.toString());</span><br><span class="line">        Object obj = redisUtil.eval(script, keys, args);</span><br><span class="line">        Long result = <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">if</span>(obj != <span class="keyword">null</span>) &#123;</span><br><span class="line">            result = (Long) obj;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 判断&#123;timeout&#125;时间内能否获取&#123;tokenCount&#125;令牌，如果能获取到则预定令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span> 需要等待时长</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> Long <span class="title">tryAndGetWaitTime</span><span class="params">(Long tokenCount, Long timeoutMillis)</span> </span>&#123;</span><br><span class="line">        putDefaultPermits();</span><br><span class="line">        String script = <span class="string">"redis.replicate_commands() "</span> +</span><br><span class="line">                <span class="string">"local redisKey = KEYS[1] "</span> +</span><br><span class="line">                <span class="string">"local timeStrArray = redis.call('time') "</span> +</span><br><span class="line">                <span class="string">"local seconds = tonumber(timeStrArray[1]) "</span> +</span><br><span class="line">                <span class="string">"local microseconds = tonumber(timeStrArray[2]) "</span> +</span><br><span class="line">                <span class="string">"local nowMilliseconds = seconds * 1000 + math.modf(microseconds/1000) "</span> +</span><br><span class="line">                <span class="string">"local redisPermitsValues = redis.call('hmget', redisKey, 'nextFreeTicketMillis', 'maxPermits', 'storedPermits', 'intervalMillis') "</span> +</span><br><span class="line">                <span class="string">"local nextFreeTicketMillis = tonumber(redisPermitsValues[1]) "</span> +</span><br><span class="line">                <span class="string">"local maxPermits = tonumber(redisPermitsValues[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermits = tonumber(redisPermitsValues[3]) "</span> +</span><br><span class="line">                <span class="string">"local intervalMillis = tonumber(redisPermitsValues[4]) "</span> +</span><br><span class="line">                <span class="string">"if(nowMilliseconds &gt; nextFreeTicketMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"storedPermits = math.min(maxPermits, storedPermits + math.modf((nowMilliseconds - nextFreeTicketMillis) / intervalMillis)) "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"local tokenCount = tonumber(ARGV[1]) "</span> +</span><br><span class="line">                <span class="string">"local timeoutMillis = tonumber(ARGV[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermitsToSpend = math.min(tokenCount, storedPermits) "</span> +</span><br><span class="line">                <span class="string">"local freshPermits = tokenCount - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"local waitMillis = freshPermits * intervalMillis "</span> +</span><br><span class="line">                <span class="string">"local actualWaitMillis = nextFreeTicketMillis + waitMillis - nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"if(actualWaitMillis &lt;= timeoutMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nextFreeTicketMillis + waitMillis "</span> +</span><br><span class="line">                <span class="string">"storedPermits = storedPermits - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"redis.call('hmset', redisKey, 'nextFreeTicketMillis', nextFreeTicketMillis, 'storedPermits', storedPermits) "</span> +</span><br><span class="line">                <span class="string">"redis.call('expire', redisKey, 120) "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"return actualWaitMillis"</span>;</span><br><span class="line">        List&lt;String&gt; keys = Collections.singletonList(key);</span><br><span class="line">        List&lt;String&gt; args = Arrays.asList(tokenCount.toString(), timeoutMillis.toString());</span><br><span class="line">        Object obj = redisUtil.eval(script, keys, args);</span><br><span class="line">        Long result = <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">if</span>(obj != <span class="keyword">null</span>) &#123;</span><br><span class="line">            result = (Long) obj;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>可以看到，限流器的主要方法是acquire和tryAcquire，前者是进行线程阻塞以等待令牌桶中达到所需令牌，后者是设定超时时间，并判断在超时时间内能否获取所需令牌，可以的话再进行线程阻塞等待令牌。获取由于存储在Redis中的令牌桶信息在集群环境下会有线程不同步问题，虽然采用Redis分布锁可以解决该问题，但是会造成线程阻塞，降低并发效率。而Redis运行lua脚本是原子性操作，因此本文采用lua脚本执行对令牌桶的计算和更新操作。可以看到核心方法reserveAndGetWaitTime和tryAndGetWaitTime方法都使用了lua脚本，下面简单讲解一下这两个方法的实现逻辑。</p>
+<h3 id="reserveAndGetWaitTime"><a href="#reserveAndGetWaitTime" class="headerlink" title="reserveAndGetWaitTime"></a>reserveAndGetWaitTime</h3><ul>
+<li>更新令牌桶，这一步操作就是上文讲到的延迟更新令牌</li>
+<li>计算所需令牌数与令牌桶中令牌数的插值，确定补全所需令牌数需要等待的时间</li>
+<li>取令牌并将令牌桶数据更新到Redis</li>
+</ul>
+<h3 id="tryAndGetWaitTime"><a href="#tryAndGetWaitTime" class="headerlink" title="tryAndGetWaitTime"></a>tryAndGetWaitTime</h3><ul>
+<li>同样是先更新令牌桶</li>
+<li>计算所需令牌数与令牌桶中令牌数的插值，确定补全所需令牌数需要等待的时间</li>
+<li>判断等待的时间是否在超时时间内，如果是的话再取令牌将令牌桶数据更新到Redis</li>
+</ul>
+
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+      
+    
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Redis/" rel="tag"># Redis</a>
+          
+            <a href="/tags/限流/" rel="tag"># 限流</a>
+          
+            <a href="/tags/令牌桶/" rel="tag"># 令牌桶</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/01/20/缓存常用问题及解决方案/" rel="next" title="缓存常用问题及解决方案">
+                <i class="fa fa-chevron-left"></i> 缓存常用问题及解决方案
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+  </div>
+
+
+          </div>
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Vincent Zhuang</p>
+              <p class="site-description motion-element" itemprop="description">专注于后端的技术博客</p>
+          </div>
+
+          
+            <nav class="site-state motion-element">
+              
+                <div class="site-state-item site-state-posts">
+                
+                  <a href="/archives/">
+                
+                    <span class="site-state-item-count">4</span>
+                    <span class="site-state-item-name">日志</span>
+                  </a>
+                </div>
+              
+
+              
+                
+                
+                <div class="site-state-item site-state-categories">
+                  <a href="/categories/index.html">
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                    <span class="site-state-item-count">5</span>
+                    <span class="site-state-item-name">分类</span>
+                  </a>
+                </div>
+              
+
+              
+                
+                
+                <div class="site-state-item site-state-tags">
+                  <a href="/tags/index.html">
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                    <span class="site-state-item-count">8</span>
+                    <span class="site-state-item-name">标签</span>
+                  </a>
+                </div>
+              
+            </nav>
+          
+
+          
+
+          
+
+          
+
+          
+          
+
+          
+            
+          
+          
+
+        </div>
+      </div>
+
+      
+      <!--noindex-->
+        <div class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+            
+            
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#1-令牌桶算法"><span class="nav-number">1.</span> <span class="nav-text">1 令牌桶算法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-1-简介"><span class="nav-number">1.1.</span> <span class="nav-text">1.1 简介</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#1-2-算法过程"><span class="nav-number">1.2.</span> <span class="nav-text">1.2 算法过程</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-实现原理"><span class="nav-number">2.</span> <span class="nav-text">2 实现原理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#3-具体实现"><span class="nav-number">3.</span> <span class="nav-text">3 具体实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#3-1-令牌桶"><span class="nav-number">3.1.</span> <span class="nav-text">3.1 令牌桶</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-2-限流器"><span class="nav-number">3.2.</span> <span class="nav-text">3.2 限流器</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#reserveAndGetWaitTime"><span class="nav-number">3.2.1.</span> <span class="nav-text">reserveAndGetWaitTime</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tryAndGetWaitTime"><span class="nav-number">3.2.2.</span> <span class="nav-text">tryAndGetWaitTime</span></a></li></ol></li></ol></li></ol></div>
+            
+
+          </div>
+        </div>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Vincent Zhuang</span>
+
+  
+
+  
+</div>
+
+
+  <div class="powered-by">由 <a href="https://hexo.io" class="theme-link" rel="noopener" target="_blank">Hexo</a> 强力驱动 v3.8.0</div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">主题 – <a href="https://theme-next.org" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> v6.7.0</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+    
+
+    
+  </div>
+
+  
+
+<script>
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+
+  
+
+
+  <script src="/js/src/utils.js?v=6.7.0"></script>
+
+  <script src="/js/src/motion.js?v=6.7.0"></script>
+
+
+
+  
+  
+
+
+  <script src="/js/src/affix.js?v=6.7.0"></script>
+
+  <script src="/js/src/schemes/pisces.js?v=6.7.0"></script>
+
+
+
+  
+  <script src="/js/src/scrollspy.js?v=6.7.0"></script>
+<script src="/js/src/post-details.js?v=6.7.0"></script>
+
+
+
+  
+
+
+  <script src="/js/src/bootstrap.js?v=6.7.0"></script>
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  <script>
+    // Popup Window;
+    var isfetched = false;
+    var isXml = true;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    } else if (/json$/i.test(search_path)) {
+      isXml = false;
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      var $localSearchInput = $('#local-search-input');
+      $localSearchInput.attr("autocapitalize", "none");
+      $localSearchInput.attr("autocorrect", "off");
+      $localSearchInput.focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+
+      // start loading animation
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay">' +
+          '<div id="search-loading-icon">' +
+          '<i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>' +
+          '</div>' +
+          '</div>')
+        .css('overflow', 'hidden');
+      $("#search-loading-icon").css('margin', '20% auto 0 auto').css('text-align', 'center');
+
+      
+
+      $.ajax({
+        url: path,
+        dataType: isXml ? "xml" : "json",
+        async: true,
+        success: function(res) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = isXml ? $("entry", res).map(function() {
+            return {
+              title: $("title", this).text(),
+              content: $("content",this).text(),
+              url: $("url" , this).text()
+            };
+          }).get() : res;
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url).replace(/\/{2,}/g, '/');
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x"></i></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x"></i></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+
+          // remove loading animation
+          $(".local-search-pop-overlay").remove();
+          $('body').css('overflow', '');
+
+          proceedsearch();
+        }
+      });
+    }
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+  <script>
+    
+    function addCount(Counter) {
+      var $visitors = $(".leancloud_visitors");
+      var url = $visitors.attr('id').trim();
+      var title = $visitors.attr('data-flag-title').trim();
+
+      Counter('get', '/classes/Counter', { where: JSON.stringify({ url }) })
+        .done(function ({ results }) {
+          if (results.length > 0) {
+            var counter = results[0];
+            
+            Counter('put', `/classes/Counter/${counter.objectId}`, JSON.stringify({ time: { "__op":"Increment", "amount":1 } }))
+            
+            .done(function () {
+                  var $element = $(document.getElementById(url));
+                  $element.find('.leancloud-visitors-count').text(counter.time + 1);
+            })
+            
+            .fail(function ({ responseJSON }) {
+                console.log('Failed to save Visitor num, with error message: ' + responseJSON.error);
+            })
+          } else {
+            
+              Counter('post', '/classes/Counter', JSON.stringify({ title: title, url: url, time: 1}))
+                .done(function () {
+                  var $element = $(document.getElementById(url));
+                  $element.find('.leancloud-visitors-count').text(1);
+                })
+                .fail(function () {
+                  console.log('Failed to create');
+                });
+            
+          }
+        })
+      .fail(function ({ responseJSON }) {
+        console.log('LeanCloud Counter Error:' + responseJSON.code + " " + responseJSON.error);
+      });
+    }
+    
+
+    $(function() {
+      $.get('https://app-router.leancloud.cn/2/route?appId=' + "uqpWhkPnJiv4A2tkhib7y4KW-gzGzoHsz")
+        .done(function ({ api_server }) {
+          var Counter = function (method, url, data) {
+            return $.ajax({
+              method: method,
+              url: `https://${api_server}/1.1${url}`,
+              headers: {
+                'X-LC-Id': "uqpWhkPnJiv4A2tkhib7y4KW-gzGzoHsz",
+                'X-LC-Key': "yvNpfObBNIsrQMOAqx9AbUdH",
+                'Content-Type': 'application/json',
+              },
+              data: data,
+            });
+          };
+          
+          addCount(Counter);
+          
+        })
+    });
+  </script>
+
+
+
+  
+
+  
+  <script>
+    (function(){
+      var bp = document.createElement('script');
+      var curProtocol = window.location.protocol.split(':')[0];
+      if (curProtocol === 'https') {
+        bp.src = 'https://zz.bdstatic.com/linksubmit/push.js';        
+      }
+      else {
+        bp.src = 'http://push.zhanzhang.baidu.com/push.js';
+      }
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(bp, s);
+    })();
+  </script>
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

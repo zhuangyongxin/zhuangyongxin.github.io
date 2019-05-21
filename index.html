@@ -392,6 +392,223 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Vincent Zhuang">
+      <meta itemprop="description" content="专注于后端的技术博客">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Vincent Blogs">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                
+                <a href="/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/" class="post-title-link" itemprop="url">基于Redis和令牌桶算法实现的集群接口限流器</a>
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+
+              
+                
+              
+
+              <time title="创建时间：2019-05-20 20:00:00" itemprop="dateCreated datePublished" datetime="2019-05-20T20:00:00+08:00">2019-05-20</time>
+            
+
+            
+              
+
+              
+                
+                <span class="post-meta-divider">|</span>
+                
+
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-calendar-check-o"></i>
+                </span>
+                
+                  <span class="post-meta-item-text">更新于</span>
+                
+                <time title="修改时间：2019-05-21 09:53:03" itemprop="dateModified" datetime="2019-05-21T09:53:03+08:00">2019-05-21</time>
+              
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope="" itemtype="http://schema.org/Thing"><a href="/categories/常用组件/" itemprop="url" rel="index"><span itemprop="name">常用组件</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+             <span id="/2019/05/20/基于Redis和令牌桶算法实现的集群接口限流器/" class="leancloud_visitors" data-flag-title="基于Redis和令牌桶算法实现的集群接口限流器">
+               <span class="post-meta-divider">|</span>
+               <span class="post-meta-item-icon">
+                 <i class="fa fa-eye"></i>
+               </span>
+               
+                 <span class="post-meta-item-text">阅读次数：</span>
+               
+                 <span class="leancloud-visitors-count"></span>
+             </span>
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <p>任何系统的性能都有一个上限，当并发量超过这个上限之后，可1能会对系统造成毁灭性地打击。因此在任何时刻我们都必须保证系统的并发请求数量不能超过某个阈值，限流就是为了完成这一目的。本限流器是基于Redis记录流量数据，实现对接口的精准限流，保证系统的稳定运行。</p>
+<h1 id="1-令牌桶算法"><a href="#1-令牌桶算法" class="headerlink" title="1 令牌桶算法"></a>1 令牌桶算法</h1><p>该限流器采用流行的令牌桶算法，现简单讲解令牌桶算法的原理</p>
+<h2 id="1-1-简介"><a href="#1-1-简介" class="headerlink" title="1.1 简介"></a>1.1 简介</h2><p>令牌桶算法最初来源于计算机网络。在网络传输数据时，为了防止网络拥塞，需限制流出网络的流量，使流量以比较均匀的速度向外发送。令牌桶算法就实现了这个功能，可控制发送到网络上数据的数目，并允许突发数据的发送。</p>
+<p>令牌桶算法是网络流量整形（Traffic Shaping）和速率限制（Rate Limiting）中最常使用的一种算法。典型情况下，令牌桶算法用来控制发送到网络上的数据的数目，并允许突发数据的发送。</p>
+<p>大小固定的令牌桶可自行以恒定的速率源源不断地产生令牌。如果令牌不被消耗，或者被消耗的速度小于产生的速度，令牌就会不断地增多，直到把桶填满。后面再产生的令牌就会从桶中溢出。最后桶中可以保存的最大令牌数永远不会超过桶的大小。</p>
+<p>传送到令牌桶的数据包需要消耗令牌。不同大小的数据包，消耗的令牌数量不一样。令牌桶这种控制机制基于令牌桶中是否存在令牌来指示什么时候可以发送流量。令牌桶中的每一个令牌都代表一个字节。如果令牌桶中存在令牌，则允许发送流量；而如果令牌桶中不存在令牌，则不允许发送流量。因此，如果突发门限被合理地配置并且令牌桶中有足够的令牌，那么流量就可以以峰值速率发送。</p>
+<h2 id="1-2-算法过程"><a href="#1-2-算法过程" class="headerlink" title="1.2 算法过程"></a>1.2 算法过程</h2><p><img src="/images/token-bucket.png" alt=""><br>算法描述：</p>
+<ul>
+<li>假如用户配置的平均发送速率为r，则每隔1/r秒一个令牌被加入到桶中（每秒会有r个令牌放入桶中）；</li>
+<li>假设桶中最多可以存放b个令牌。如果令牌到达时令牌桶已经满了，那么这个令牌会被丢弃；</li>
+<li>当一个n个字节的数据包到达时，就从令牌桶中删除n个令牌（不同大小的数据包，消耗的令牌数量不一样），并且数据包被发送到网络；</li>
+<li>如果令牌桶中少于n个令牌，那么不会删除令牌，并且认为这个数据包在流量限制之外（n个字节，需要n个令牌。该数据包将被缓存或丢弃）；</li>
+<li>算法允许最长b个字节的突发，但从长期运行结果看，数据包的速率被限制成常量r。对于在流量限制外的数据包可以以不同的方式处理：（1）它们可以被丢弃；（2）它们可以排放在队列中以便当令牌桶中累积了足够多的令牌时再传输；（3）它们可以继续发送，但需要做特殊标记，网络过载的时候将这些特殊标记的包丢弃。</li>
+</ul>
+<h1 id="2-实现原理"><a href="#2-实现原理" class="headerlink" title="2 实现原理"></a>2 实现原理</h1><p>本限流器主要是基于令牌桶思想，并将令牌数存储到Redis中，实现在集群模式下对接口的精准限流，实现思想如下：</p>
+<ul>
+<li>对于每个限流接口，记录最大存储令牌数maxPermits， 当前存储令牌数storedPermits， 添加令牌时间间隔intervalMillis， 下次请求可以获取令牌的起始时间nextFreeTicketMillis，这些信息都记录在Redis中</li>
+<li>响应本次请求之后，动态计算下一次可以服务的时间，如果下一次请求在这个时间之前则需要进行等待。 nextFreeTicketMicros 记录下一次可以响应的时间。例如，如果我们设置QPS为1，本次请求处理完之后，那么下一次最早的能够响应请求的时间一秒钟之后。</li>
+<li>限流器支持处理突发流量请求，突发请求允许个数就是最大存储令牌数maxPermits。例如，我们设置QPS为1，在十秒钟之内没有请求，那么令牌桶中会有10个（假设设置的maxPermits为10）空闲令牌，如果下一次请求是 10个令牌，则可以一次性获取10个令牌，因为令牌桶中已经有10个空闲的令牌。 storedPermits 就是用来表示当前令牌桶中的空闲令牌数。</li>
+<li>对于令牌的产生有两种方式，一种是通过后台定时任务来不断产生令牌，一种是延迟生成，在每次获取令牌之前先计算在nextFreeTicketMillis到目前这个时间段内应该产生多少令牌，并更新令牌桶。本限流器采用的是后者。</li>
+</ul>
+<h1 id="3-具体实现"><a href="#3-具体实现" class="headerlink" title="3 具体实现"></a>3 具体实现</h1><h2 id="3-1-令牌桶"><a href="#3-1-令牌桶" class="headerlink" title="3.1 令牌桶"></a>3.1 令牌桶</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Redis令牌桶</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="meta">@Data</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RedisPermits</span> <span class="keyword">implements</span> <span class="title">Serializable</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">long</span> serialVersionUID = <span class="number">1L</span>;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * maxPermits 最大存储令牌数</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long maxPermits;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * storedPermits 当前存储令牌数</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long storedPermits;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * intervalMillis 添加令牌时间间隔</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long intervalMillis;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * nextFreeTicketMillis 下次请求可以获取令牌的起始时间，默认当前系统时间</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> Long nextFreeTicketMillis;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> permitsPerSecond 每秒放入的令牌数</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> maxBurstSeconds  maxPermits由此字段计算，最大存储maxBurstSeconds秒生成的令牌</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="title">RedisPermits</span><span class="params">(Double permitsPerSecond, Integer maxBurstSeconds)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">null</span> == maxBurstSeconds) &#123;</span><br><span class="line">            maxBurstSeconds = <span class="number">60</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">this</span>.maxPermits = (<span class="keyword">long</span>) (permitsPerSecond * maxBurstSeconds);</span><br><span class="line">        <span class="keyword">this</span>.storedPermits = permitsPerSecond.longValue();</span><br><span class="line">        <span class="keyword">this</span>.intervalMillis = (<span class="keyword">long</span>) (TimeUnit.SECONDS.toMillis(<span class="number">1</span>) / permitsPerSecond);</span><br><span class="line">        <span class="keyword">this</span>.nextFreeTicketMillis = System.currentTimeMillis();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * redis的过期时长</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Long <span class="title">expires</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        <span class="keyword">long</span> now = System.currentTimeMillis();</span><br><span class="line">        <span class="keyword">return</span> <span class="number">2</span> * TimeUnit.MINUTES.toSeconds(<span class="number">1</span>)</span><br><span class="line">                + TimeUnit.MILLISECONDS.toSeconds(Math.max(nextFreeTicketMillis, now) - now);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Map&lt;String, String&gt; <span class="title">toMap</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        Map&lt;String, String&gt; resultMap = <span class="keyword">new</span> HashMap&lt;&gt;();</span><br><span class="line">        resultMap.put(<span class="string">"maxPermits"</span>, maxPermits.toString());</span><br><span class="line">        resultMap.put(<span class="string">"storedPermits"</span>, storedPermits.toString());</span><br><span class="line">        resultMap.put(<span class="string">"intervalMillis"</span>, intervalMillis.toString());</span><br><span class="line">        resultMap.put(<span class="string">"nextFreeTicketMillis"</span>, nextFreeTicketMillis.toString());</span><br><span class="line">        <span class="keyword">return</span> resultMap;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+<p>该类主要存储了令牌桶核心的四个参数</p>
+<h2 id="3-2-限流器"><a href="#3-2-限流器" class="headerlink" title="3.2 限流器"></a>3.2 限流器</h2><p>主要方法：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Slf</span>4j</span><br><span class="line"><span class="meta">@Data</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RateLimiter</span> </span>&#123;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 在超时时间内尝试获取&#123;tokenCount&#125;个令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> timeout</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> timeUnit</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     * <span class="doctag">@throws</span> InterruptedException</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">tryAcquire</span><span class="params">(Long tokenCount, Long timeout, TimeUnit timeUnit)</span> <span class="keyword">throws</span> InterruptedException</span>&#123;</span><br><span class="line">        <span class="keyword">if</span>(checkTokens(tokenCount)) &#123;</span><br><span class="line">            Long timeoutMillis = Math.max(timeUnit.toMillis(timeout), <span class="number">0</span>);</span><br><span class="line">            Long millisToWait = tryAndGetWaitTime(tokenCount, timeoutMillis);</span><br><span class="line">            <span class="keyword">if</span>(millisToWait &lt;= timeoutMillis) &#123;</span><br><span class="line">                log.info(<span class="string">"tryAcquire for &#123;&#125;ms &#123;&#125;"</span>, millisToWait, Thread.currentThread().getName());</span><br><span class="line">                Thread.sleep(millisToWait);</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 等待直到获取指定数量的令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     * <span class="doctag">@throws</span> InterruptedException</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> Long <span class="title">acquire</span><span class="params">(Long tokenCount)</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">        <span class="keyword">long</span> milliToWait = <span class="keyword">this</span>.reserve(tokenCount);</span><br><span class="line">        log.info(<span class="string">"acquire for &#123;&#125;ms &#123;&#125;"</span>, milliToWait, Thread.currentThread().getName());</span><br><span class="line">        Thread.sleep(milliToWait);</span><br><span class="line">        <span class="keyword">return</span> milliToWait;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 获取令牌n个需要等待的时间</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> <span class="keyword">long</span> <span class="title">reserve</span><span class="params">(Long tokenCount)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">if</span> (checkTokens(tokenCount)) &#123;</span><br><span class="line">            <span class="keyword">return</span> reserveAndGetWaitTime(tokenCount);</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 预定@&#123;tokenCount&#125;个令牌并返回所需要等待的时间</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span></span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> Long <span class="title">reserveAndGetWaitTime</span><span class="params">(Long tokenCount)</span></span>&#123;</span><br><span class="line">        putDefaultPermits();</span><br><span class="line">        String script = <span class="string">"redis.replicate_commands() "</span> +</span><br><span class="line">                <span class="string">"local redisKey = KEYS[1] "</span> +</span><br><span class="line">                <span class="string">"local timeStrArray = redis.call('time') "</span> +</span><br><span class="line">                <span class="string">"local seconds = tonumber(timeStrArray[1]) "</span> +</span><br><span class="line">                <span class="string">"local microseconds = tonumber(timeStrArray[2]) "</span> +</span><br><span class="line">                <span class="string">"local nowMilliseconds = seconds * 1000 + math.modf(microseconds/1000) "</span> +</span><br><span class="line">                <span class="string">"local redisPermitsValues = redis.call('hmget', redisKey, 'nextFreeTicketMillis', 'maxPermits', 'storedPermits', 'intervalMillis') "</span> +</span><br><span class="line">                <span class="string">"local nextFreeTicketMillis = tonumber(redisPermitsValues[1]) "</span> +</span><br><span class="line">                <span class="string">"local maxPermits = tonumber(redisPermitsValues[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermits = tonumber(redisPermitsValues[3]) "</span> +</span><br><span class="line">                <span class="string">"local intervalMillis = tonumber(redisPermitsValues[4]) "</span> +</span><br><span class="line">                <span class="string">"if(nowMilliseconds &gt; nextFreeTicketMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"storedPermits = math.min(maxPermits, storedPermits + math.modf((nowMilliseconds - nextFreeTicketMillis) / intervalMillis)) "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"local tokenCount = tonumber(ARGV[1]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermitsToSpend = math.min(tokenCount, storedPermits) "</span> +</span><br><span class="line">                <span class="string">"local freshPermits = tokenCount - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"local waitMillis = freshPermits * intervalMillis "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nextFreeTicketMillis + waitMillis "</span> +</span><br><span class="line">                <span class="string">"storedPermits = storedPermits - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"redis.call('hmset', redisKey, 'nextFreeTicketMillis', nextFreeTicketMillis, 'storedPermits', storedPermits) "</span> +</span><br><span class="line">                <span class="string">"redis.call('expire', redisKey, 120) "</span> +</span><br><span class="line">                <span class="string">"return nextFreeTicketMillis - nowMilliseconds"</span>;</span><br><span class="line">        List&lt;String&gt; keys = Collections.singletonList(key);</span><br><span class="line">        List&lt;String&gt; args = Collections.singletonList(tokenCount.toString());</span><br><span class="line">        Object obj = redisUtil.eval(script, keys, args);</span><br><span class="line">        Long result = <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">if</span>(obj != <span class="keyword">null</span>) &#123;</span><br><span class="line">            result = (Long) obj;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 判断&#123;timeout&#125;时间内能否获取&#123;tokenCount&#125;令牌，如果能获取到则预定令牌</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@param</span> tokenCount</span></span><br><span class="line"><span class="comment">     * <span class="doctag">@return</span> 需要等待时长</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">private</span> Long <span class="title">tryAndGetWaitTime</span><span class="params">(Long tokenCount, Long timeoutMillis)</span> </span>&#123;</span><br><span class="line">        putDefaultPermits();</span><br><span class="line">        String script = <span class="string">"redis.replicate_commands() "</span> +</span><br><span class="line">                <span class="string">"local redisKey = KEYS[1] "</span> +</span><br><span class="line">                <span class="string">"local timeStrArray = redis.call('time') "</span> +</span><br><span class="line">                <span class="string">"local seconds = tonumber(timeStrArray[1]) "</span> +</span><br><span class="line">                <span class="string">"local microseconds = tonumber(timeStrArray[2]) "</span> +</span><br><span class="line">                <span class="string">"local nowMilliseconds = seconds * 1000 + math.modf(microseconds/1000) "</span> +</span><br><span class="line">                <span class="string">"local redisPermitsValues = redis.call('hmget', redisKey, 'nextFreeTicketMillis', 'maxPermits', 'storedPermits', 'intervalMillis') "</span> +</span><br><span class="line">                <span class="string">"local nextFreeTicketMillis = tonumber(redisPermitsValues[1]) "</span> +</span><br><span class="line">                <span class="string">"local maxPermits = tonumber(redisPermitsValues[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermits = tonumber(redisPermitsValues[3]) "</span> +</span><br><span class="line">                <span class="string">"local intervalMillis = tonumber(redisPermitsValues[4]) "</span> +</span><br><span class="line">                <span class="string">"if(nowMilliseconds &gt; nextFreeTicketMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"storedPermits = math.min(maxPermits, storedPermits + math.modf((nowMilliseconds - nextFreeTicketMillis) / intervalMillis)) "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"local tokenCount = tonumber(ARGV[1]) "</span> +</span><br><span class="line">                <span class="string">"local timeoutMillis = tonumber(ARGV[2]) "</span> +</span><br><span class="line">                <span class="string">"local storedPermitsToSpend = math.min(tokenCount, storedPermits) "</span> +</span><br><span class="line">                <span class="string">"local freshPermits = tokenCount - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"local waitMillis = freshPermits * intervalMillis "</span> +</span><br><span class="line">                <span class="string">"local actualWaitMillis = nextFreeTicketMillis + waitMillis - nowMilliseconds "</span> +</span><br><span class="line">                <span class="string">"if(actualWaitMillis &lt;= timeoutMillis) "</span> +</span><br><span class="line">                <span class="string">"then "</span> +</span><br><span class="line">                <span class="string">"nextFreeTicketMillis = nextFreeTicketMillis + waitMillis "</span> +</span><br><span class="line">                <span class="string">"storedPermits = storedPermits - storedPermitsToSpend "</span> +</span><br><span class="line">                <span class="string">"redis.call('hmset', redisKey, 'nextFreeTicketMillis', nextFreeTicketMillis, 'storedPermits', storedPermits) "</span> +</span><br><span class="line">                <span class="string">"redis.call('expire', redisKey, 120) "</span> +</span><br><span class="line">                <span class="string">"end "</span> +</span><br><span class="line">                <span class="string">"return actualWaitMillis"</span>;</span><br><span class="line">        List&lt;String&gt; keys = Collections.singletonList(key);</span><br><span class="line">        List&lt;String&gt; args = Arrays.asList(tokenCount.toString(), timeoutMillis.toString());</span><br><span class="line">        Object obj = redisUtil.eval(script, keys, args);</span><br><span class="line">        Long result = <span class="keyword">null</span>;</span><br><span class="line">        <span class="keyword">if</span>(obj != <span class="keyword">null</span>) &#123;</span><br><span class="line">            result = (Long) obj;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> result;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>可以看到，限流器的主要方法是acquire和tryAcquire，前者是进行线程阻塞以等待令牌桶中达到所需令牌，后者是设定超时时间，并判断在超时时间内能否获取所需令牌，可以的话再进行线程阻塞等待令牌。获取由于存储在Redis中的令牌桶信息在集群环境下会有线程不同步问题，虽然采用Redis分布锁可以解决该问题，但是会造成线程阻塞，降低并发效率。而Redis运行lua脚本是原子性操作，因此本文采用lua脚本执行对令牌桶的计算和更新操作。可以看到核心方法reserveAndGetWaitTime和tryAndGetWaitTime方法都使用了lua脚本，下面简单讲解一下这两个方法的实现逻辑。</p>
+<h3 id="reserveAndGetWaitTime"><a href="#reserveAndGetWaitTime" class="headerlink" title="reserveAndGetWaitTime"></a>reserveAndGetWaitTime</h3><ul>
+<li>更新令牌桶，这一步操作就是上文讲到的延迟更新令牌</li>
+<li>计算所需令牌数与令牌桶中令牌数的插值，确定补全所需令牌数需要等待的时间</li>
+<li>取令牌并将令牌桶数据更新到Redis</li>
+</ul>
+<h3 id="tryAndGetWaitTime"><a href="#tryAndGetWaitTime" class="headerlink" title="tryAndGetWaitTime"></a>tryAndGetWaitTime</h3><ul>
+<li>同样是先更新令牌桶</li>
+<li>计算所需令牌数与令牌桶中令牌数的插值，确定补全所需令牌数需要等待的时间</li>
+<li>判断等待的时间是否在超时时间内，如果是的话再取令牌将令牌桶数据更新到Redis</li>
+</ul>
+
+          
+        
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+      
+    
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2019/01/20/缓存常用问题及解决方案/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -1078,7 +1295,7 @@
                 
                   <a href="/archives/">
                 
-                    <span class="site-state-item-count">3</span>
+                    <span class="site-state-item-count">4</span>
                     <span class="site-state-item-name">日志</span>
                   </a>
                 </div>
@@ -1099,7 +1316,9 @@
                     
                       
                     
-                    <span class="site-state-item-count">4</span>
+                      
+                    
+                    <span class="site-state-item-count">5</span>
                     <span class="site-state-item-name">分类</span>
                   </a>
                 </div>
@@ -1124,7 +1343,11 @@
                     
                       
                     
-                    <span class="site-state-item-count">6</span>
+                      
+                    
+                      
+                    
+                    <span class="site-state-item-count">8</span>
                     <span class="site-state-item-name">标签</span>
                   </a>
                 </div>
