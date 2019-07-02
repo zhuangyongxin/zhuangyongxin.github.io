@@ -437,7 +437,7 @@
                 
               
 
-              <time title="创建时间：2019-07-02 20:00:00 / 修改时间：14:47:02" itemprop="dateCreated datePublished" datetime="2019-07-02T20:00:00+08:00">2019-07-02</time>
+              <time title="创建时间：2019-07-02 20:00:00 / 修改时间：16:29:59" itemprop="dateCreated datePublished" datetime="2019-07-02T20:00:00+08:00">2019-07-02</time>
             
 
             
@@ -554,6 +554,11 @@
 <p>不要滥用索引，多余的索引会降低读写性能</p>
 <p><strong>即使满足了上述原则，mysql还是可能会弃用索引，因为有些查询即使使用索引，也会出现大量的随机io，相对于从数据记录中的顺序io开销更大。</strong></p>
 <h2 id="mysql-中能够使用索引的典型应用"><a href="#mysql-中能够使用索引的典型应用" class="headerlink" title="mysql 中能够使用索引的典型应用"></a>mysql 中能够使用索引的典型应用</h2><p>测试库下载地址：<a href="https://downloads.mysql.com/d…" target="_blank" rel="noopener">https://downloads.mysql.com/d…</a></p>
+<p>这里，先普及下explain之后的type和extra内容，具体可看以下文章：</p>
+<ul>
+<li><a href="https://mengkang.net/1124.html" target="_blank" rel="noopener">https://mengkang.net/1124.html</a></li>
+<li><a href="https://www.cnblogs.com/kerrycode/p/9909093.html" target="_blank" rel="noopener">https://www.cnblogs.com/kerrycode/p/9909093.html</a></li>
+</ul>
 <h3 id="匹配全值（match-the-full-value）"><a href="#匹配全值（match-the-full-value）" class="headerlink" title="匹配全值（match the full value）"></a>匹配全值（match the full value）</h3><p>对索引中所有列都指定具体值，即是对索引中的所有列都有等值匹配的条件。<br>例如，租赁表 rental 中通过指定出租日期 rental_date + 库存编号 inventory_id + 客户编号 customer_id 的组合条件进行查询，从执行计划的 key he extra 两字段的值看到优化器选择了复合索引 idx_rental_date:</p>
 <p>关于explain结果值及其含义可以参考我的另一篇博客MySql数据库中的索引<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">MySQL [sakila]&gt; explain select * from rental where rental_date=&apos;2005-05-25 17:22:10&apos; and inventory_id=373 and customer_id=343 \G</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: rental</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: const</span><br><span class="line">possible_keys: rental_date,idx_fk_inventory_id,idx_fk_customer_id</span><br><span class="line">          key: rental_date</span><br><span class="line">      key_len: 10</span><br><span class="line">          ref: const,const,const</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: NULL</span><br><span class="line"> 1 row in set, 1 warning (0.00 sec)</span><br></pre></td></tr></table></figure></p>
 <p>explain 输出结果中字段 type 的值为 const，表示是常量；字段 key 的值为 rental_date, 表示优化器选择索引 rental_date 进行扫描。</p>
