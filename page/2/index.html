@@ -98,25 +98,24 @@
 
 
 
-  <meta name="description" content="传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。">
-<meta name="keywords" content="Spring Cloud,Eureka,微服务,注册中心">
-<meta property="og:type" content="article">
-<meta property="og:title" content="Spring Cloud Eureka原理详解">
-<meta property="og:url" content="https://zhuangyongxin.github.io/2018/12/24/Spring-Cloud-Eureka原理详解/index.html">
+  <meta name="description" content="专注于后端的技术博客">
+<meta name="keywords" content="后端 后台 技术 Vincent">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vincent Blogs">
+<meta property="og:url" content="https://zhuangyongxin.github.io/page/2/index.html">
 <meta property="og:site_name" content="Vincent Blogs">
-<meta property="og:description" content="传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。">
+<meta property="og:description" content="专注于后端的技术博客">
 <meta property="og:locale" content="zh-CN">
-<meta property="og:updated_time" content="2019-01-02T12:38:26.260Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Spring Cloud Eureka原理详解">
-<meta name="twitter:description" content="传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。">
+<meta name="twitter:title" content="Vincent Blogs">
+<meta name="twitter:description" content="专注于后端的技术博客">
 
 
 
 
 
 
-  <link rel="canonical" href="https://zhuangyongxin.github.io/2018/12/24/Spring-Cloud-Eureka原理详解/">
+  <link rel="canonical" href="https://zhuangyongxin.github.io/page/2/">
 
 
 
@@ -126,7 +125,7 @@
   };
 </script>
 
-  <title>Spring Cloud Eureka原理详解 | Vincent Blogs</title>
+  <title>Vincent Blogs</title>
   
 
 
@@ -174,7 +173,8 @@
     
   
 
-  <div class="container sidebar-position-left page-post-detail">
+  <div class="container sidebar-position-left 
+  page-home">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope="" itemtype="http://schema.org/WPHeader">
@@ -375,9 +375,9 @@
           
           <div id="content" class="content">
             
-
-  <div id="posts" class="posts-expand">
+  <section id="posts" class="posts-expand">
     
+      
 
   
 
@@ -409,8 +409,10 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">Spring Cloud Eureka原理详解
-
+          <h1 class="post-title" itemprop="name headline">
+                
+                
+                <a href="/2018/12/24/Spring-Cloud-Eureka原理详解/" class="post-title-link" itemprop="url">Spring Cloud Eureka原理详解</a>
               
             
           </h1>
@@ -514,7 +516,9 @@
       
 
       
-        <p>传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。<br><br>在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。由于Spring Cloud 的使用在网上都有较为全面的教程，因此，本文重点讲解常用组件的原理。为了避免读者觉得枯燥，我就从典型的电商场景来讲。</p>
+        
+          
+            <p>传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。<br><br>在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。由于Spring Cloud 的使用在网上都有较为全面的教程，因此，本文重点讲解常用组件的原理。为了避免读者觉得枯燥，我就从典型的电商场景来讲。</p>
 <h1 id="业务场景"><a href="#业务场景" class="headerlink" title="业务场景"></a>业务场景</h1><p>假设我们要开发一个电商平台，可以实现用户下单支付并且发货的功能。那么我们需要有一个<strong>订单服务，支付服务，库存服务、仓储服务、积分服务</strong>（实际电商平台肯定不止这几个哈），下定支付的业务流程是这样的：</p>
 <ul>
 <li>查询库存服务获取商品库存</li>
@@ -574,6 +578,8 @@
 <li>《Spring Cloud微服务实战》-翟永超著</li>
 </ul>
 
+          
+        
       
     </div>
 
@@ -594,42 +600,14 @@
 
     <footer class="post-footer">
       
-        <div class="post-tags">
-          
-            <a href="/tags/Spring-Cloud/" rel="tag"># Spring Cloud</a>
-          
-            <a href="/tags/Eureka/" rel="tag"># Eureka</a>
-          
-            <a href="/tags/微服务/" rel="tag"># 微服务</a>
-          
-            <a href="/tags/注册中心/" rel="tag"># 注册中心</a>
-          
-        </div>
+
+      
+
       
 
       
       
-      
-
-      
-        <div class="post-nav">
-          <div class="post-nav-next post-nav-item">
-            
-          </div>
-
-          <span class="post-nav-divider"></span>
-
-          <div class="post-nav-prev post-nav-item">
-            
-              <a href="/2019/01/09/Redis是单线程的为何速度这么快/" rel="prev" title="Redis是单线程的为何速度这么快">
-                Redis是单线程的为何速度这么快 <i class="fa fa-chevron-right"></i>
-              </a>
-            
-          </div>
-        </div>
-      
-
-      
+        <div class="post-eof"></div>
       
     </footer>
   </div>
@@ -639,15 +617,18 @@
   </article>
 
 
-  </div>
+    
+  </section>
+
+  
+  <nav class="pagination">
+    <a class="extend prev" rel="prev" href="/"><i class="fa fa-angle-left" aria-label="上一页"></i></a><a class="page-number" href="/">1</a><span class="page-number current">2</span>
+  </nav>
+
 
 
           </div>
           
-
-  
-
-
 
         </div>
         
@@ -668,17 +649,8 @@
       
 
       
-        <ul class="sidebar-nav motion-element">
-          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
-            文章目录
-          </li>
-          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
-            站点概览
-          </li>
-        </ul>
-      
 
-      <div class="site-overview-wrap sidebar-panel">
+      <div class="site-overview-wrap sidebar-panel sidebar-panel-active">
         <div class="site-overview">
           <div class="site-author motion-element" itemprop="author" itemscope="" itemtype="http://schema.org/Person">
             
@@ -788,23 +760,6 @@
         </div>
       </div>
 
-      
-      <!--noindex-->
-        <div class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
-          <div class="post-toc">
-
-            
-            
-            
-            
-
-            
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#业务场景"><span class="nav-number">1.</span> <span class="nav-text">业务场景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spring-Cloud-Eureka"><span class="nav-number">2.</span> <span class="nav-text">Spring Cloud Eureka</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#服务注册"><span class="nav-number">2.1.</span> <span class="nav-text">服务注册</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#服务获取"><span class="nav-number">2.2.</span> <span class="nav-text">服务获取</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#服务续约"><span class="nav-number">2.3.</span> <span class="nav-text">服务续约</span></a></li></ol></li></ol></div>
-            
-
-          </div>
-        </div>
-      <!--/noindex-->
       
 
       
@@ -934,10 +889,6 @@
 
 
   
-  <script src="/js/src/scrollspy.js?v=6.7.0"></script>
-<script src="/js/src/post-details.js?v=6.7.0"></script>
-
-
 
   
 
@@ -1293,42 +1244,43 @@
   
   <script>
     
-    function addCount(Counter) {
+    function showTime(Counter) {
+      var entries = [];
       var $visitors = $(".leancloud_visitors");
-      var url = $visitors.attr('id').trim();
-      var title = $visitors.attr('data-flag-title').trim();
 
-      Counter('get', '/classes/Counter', { where: JSON.stringify({ url }) })
+      $visitors.each(function () {
+        entries.push( $(this).attr("id").trim() );
+      });
+
+      Counter('get', '/classes/Counter', { where: JSON.stringify({ url: { "$in": entries } }) })
         .done(function ({ results }) {
-          if (results.length > 0) {
-            var counter = results[0];
-            
-            Counter('put', `/classes/Counter/${counter.objectId}`, JSON.stringify({ time: { "__op":"Increment", "amount":1 } }))
-            
-            .done(function () {
-                  var $element = $(document.getElementById(url));
-                  $element.find('.leancloud-visitors-count').text(counter.time + 1);
-            })
-            
-            .fail(function ({ responseJSON }) {
-                console.log('Failed to save Visitor num, with error message: ' + responseJSON.error);
-            })
-          } else {
-            
-              Counter('post', '/classes/Counter', JSON.stringify({ title: title, url: url, time: 1}))
-                .done(function () {
-                  var $element = $(document.getElementById(url));
-                  $element.find('.leancloud-visitors-count').text(1);
-                })
-                .fail(function () {
-                  console.log('Failed to create');
-                });
-            
+          var COUNT_CONTAINER_REF = '.leancloud-visitors-count';
+
+          if (results.length === 0) {
+            $visitors.find(COUNT_CONTAINER_REF).text(0);
+            return;
+          }
+
+          for (var i = 0; i < results.length; i++) {
+            var item = results[i];
+            var url = item.url;
+            var time = item.time;
+            var element = document.getElementById(url);
+
+            $(element).find(COUNT_CONTAINER_REF).text(time);
+          }
+          for(var i = 0; i < entries.length; i++) {
+            var url = entries[i];
+            var element = document.getElementById(url);
+            var countSpan = $(element).find(COUNT_CONTAINER_REF);
+            if( countSpan.text() == '') {
+              countSpan.text(0);
+            }
           }
         })
-      .fail(function ({ responseJSON }) {
-        console.log('LeanCloud Counter Error:' + responseJSON.code + " " + responseJSON.error);
-      });
+        .fail(function ({ responseJSON }) {
+          console.log("LeanCloud Counter Error: " + responseJSON.code + " " + responseJSON.error);
+        });
     }
     
 
@@ -1348,7 +1300,9 @@
             });
           };
           
-          addCount(Counter);
+          if ($('.post-title-link').length >= 1) {
+            showTime(Counter);
+          }
           
         })
     });

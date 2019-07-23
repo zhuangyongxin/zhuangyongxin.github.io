@@ -392,6 +392,325 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2019/07/23/Java并发编程之volatile关键字解析/">
+
+    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Vincent Zhuang">
+      <meta itemprop="description" content="专注于后端的技术博客">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Vincent Blogs">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                
+                <a href="/2019/07/23/Java并发编程之volatile关键字解析/" class="post-title-link" itemprop="url">Java并发编程之volatile关键字解析</a>
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+
+              
+                
+              
+
+              <time title="创建时间：2019-07-23 20:00:00 / 修改时间：15:09:12" itemprop="dateCreated datePublished" datetime="2019-07-23T20:00:00+08:00">2019-07-23</time>
+            
+
+            
+              
+
+              
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope="" itemtype="http://schema.org/Thing"><a href="/categories/Java/" itemprop="url" rel="index"><span itemprop="name">Java</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+             <span id="/2019/07/23/Java并发编程之volatile关键字解析/" class="leancloud_visitors" data-flag-title="Java并发编程之volatile关键字解析">
+               <span class="post-meta-divider">|</span>
+               <span class="post-meta-item-icon">
+                 <i class="fa fa-eye"></i>
+               </span>
+               
+                 <span class="post-meta-item-text">阅读次数：</span>
+               
+                 <span class="leancloud-visitors-count"></span>
+             </span>
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <p>volatile这个关键字可能很多朋友都听说过，或许也都用过。在Java 5之前，它是一个备受争议的关键字，因为在程序中使用它往往会导致出人意料的结果。在Java 5之后，volatile关键字才得以重获生机。</p>
+<p>volatile关键字虽然从字面上理解起来比较简单，但是要用好不是一件容易的事情。由于volatile关键字是与Java的内存模型有关的，因此在讲述volatile关键之前，我们先来了解一下与内存模型相关的概念和知识，然后分析了volatile关键字的实现原理，最后给出了几个使用volatile关键字的场景。</p>
+<h1 id="内存模型的相关概念"><a href="#内存模型的相关概念" class="headerlink" title="内存模型的相关概念"></a>内存模型的相关概念</h1><p>大家都知道，计算机在执行程序时，每条指令都是在CPU中执行的，而执行指令过程中，势必涉及到数据的读取和写入。由于程序运行过程中的临时数据是存放在主存（物理内存）当中的，这时就存在一个问题，由于CPU执行速度很快，而从内存读取数据和向内存写入数据的过程跟CPU执行指令的速度比起来要慢的多，因此如果任何时候对数据的操作都要通过和内存的交互来进行，会大大降低指令执行的速度。因此在CPU里面就有了高速缓存。</p>
+<p>也就是，当程序在运行过程中，会将运算需要的数据从主存复制一份到CPU的高速缓存当中，那么CPU进行计算时就可以直接从它的高速缓存读取数据和向其中写入数据，当运算结束之后，再将高速缓存中的数据刷新到主存当中。举个简单的例子，比如下面的这段代码：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">i = i + <span class="number">1</span></span><br></pre></td></tr></table></figure></p>
+<p>当线程执行这个语句时，会先从主存当中读取i的值，然后复制一份到高速缓存当中，然后CPU执行指令对i进行加1操作，然后将数据写入高速缓存，最后将高速缓存中i最新的值刷新到主存当中。</p>
+<p>这个代码在单线程中运行是没有任何问题的，但是在多线程中运行就会有问题了。在多核CPU中，每条线程可能运行于不同的CPU中，因此每个线程运行时有自己的高速缓存（对单核CPU来说，其实也会出现这种问题，只不过是以线程调度的形式来分别执行的）。本文我们以多核CPU为例。</p>
+<p>比如同时有2个线程执行这段代码，假如初始时i的值为0，那么我们希望两个线程执行完之后i的值变为2。但是事实会是这样吗？</p>
+<p>可能存在下面一种情况：初始时，两个线程分别读取i的值存入各自所在的CPU的高速缓存当中，然后线程1进行加1操作，然后把i的最新值1写入到内存。此时线程2的高速缓存当中i的值还是0，进行加1操作之后，i的值为1，然后线程2把i的值写入内存。</p>
+<p>最终结果i的值是1，而不是2。这就是著名的缓存一致性问题。通常称这种被多个线程访问的变量为共享变量。</p>
+<p>也就是说，如果一个变量在多个CPU中都存在缓存（一般在多线程编程时才会出现），那么就可能存在缓存不一致的问题。</p>
+<p>为了解决缓存不一致性问题，通常来说有以下2种解决方法：</p>
+<ol>
+<li><p>通过在总线加LOCK#锁的方式</p>
+</li>
+<li><p>通过缓存一致性协议</p>
+</li>
+</ol>
+<p>这2种方式都是硬件层面上提供的方式。</p>
+<p>在早期的CPU当中，是通过在总线上加LOCK#锁的形式来解决缓存不一致的问题。因为CPU和其他部件进行通信都是通过总线来进行的，如果对总线加LOCK#锁的话，也就是说阻塞了其他CPU对其他部件访问（如内存），从而使得只能有一个CPU能使用这个变量的内存。比如上面例子中 如果一个线程在执行 i = i +1，如果在执行这段代码的过程中，在总线上发出了LCOK#锁的信号，那么只有等待这段代码完全执行完毕之后，其他CPU才能从变量i所在的内存读取变量，然后进行相应的操作。这样就解决了缓存不一致的问题。</p>
+<p>但是上面的方式会有一个问题，由于在锁住总线期间，其他CPU无法访问内存，导致效率低下。所以就出现了缓存一致性协议。最出名的就是Intel 的MESI协议，MESI协议保证了每个缓存中使用的共享变量的副本是一致的。它核心的思想是：当CPU写数据时，如果发现操作的变量是共享变量，即在其他CPU中也存在该变量的副本，会发出信号通知其他CPU将该变量的缓存行置为无效状态，因此当其他CPU需要读取这个变量时，发现自己缓存中缓存该变量的缓存行是无效的，那么它就会从内存重新读取。</p>
+<p><img src="/2019/07/23/Java并发编程之volatile关键字解析/1.jpg" alt=""></p>
+<h1 id="并发编程中的三个概念"><a href="#并发编程中的三个概念" class="headerlink" title="并发编程中的三个概念"></a>并发编程中的三个概念</h1><p>在并发编程中，我们通常会遇到以下三个问题：原子性问题，可见性问题，有序性问题。我们先看具体看一下这三个概念：</p>
+<h2 id="原子性"><a href="#原子性" class="headerlink" title="原子性"></a>原子性</h2><p>原子性：即一个操作或者多个操作 要么全部执行并且执行的过程不会被任何因素打断，要么就都不执行。</p>
+<p>一个很经典的例子就是银行账户转账问题：</p>
+<p>比如从账户A向账户B转1000元，那么必然包括2个操作：从账户A减去1000元，往账户B加上1000元。</p>
+<p>试想一下，如果这2个操作不具备原子性，会造成什么样的后果。假如从账户A减去1000元之后，操作突然中止。然后又从B取出了500元，取出500元之后，再执行 往账户B加上1000元 的操作。这样就会导致账户A虽然减去了1000元，但是账户B没有收到这个转过来的1000元。</p>
+<p>所以这2个操作必须要具备原子性才能保证不出现一些意外的问题。</p>
+<p>同样地反映到并发编程中会出现什么结果呢？</p>
+<p>举个最简单的例子，大家想一下假如为一个32位的变量赋值过程不具备原子性的话，会发生什么后果？<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">i = <span class="number">9</span>;</span><br></pre></td></tr></table></figure></p>
+<p>假若一个线程执行到这个语句时，我暂且假设为一个32位的变量赋值包括两个过程：为低16位赋值，为高16位赋值。</p>
+<p>那么就可能发生一种情况：当将低16位数值写入之后，突然被中断，而此时又有一个线程去读取i的值，那么读取到的就是错误的数据。</p>
+<h2 id="可见性"><a href="#可见性" class="headerlink" title="可见性"></a>可见性</h2><p>可见性是指当多个线程访问同一个变量时，一个线程修改了这个变量的值，其他线程能够立即看得到修改的值。</p>
+<p>举个简单的例子，看下面这段代码：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//线程1执行的代码</span></span><br><span class="line"><span class="keyword">int</span> i = <span class="number">0</span>;</span><br><span class="line">i = <span class="number">10</span>;</span><br><span class="line"> </span><br><span class="line"><span class="comment">//线程2执行的代码</span></span><br><span class="line">j = i;</span><br></pre></td></tr></table></figure></p>
+<p>假若执行线程1的是CPU1，执行线程2的是CPU2。由上面的分析可知，当线程1执行 i =10这句时，会先把i的初始值加载到CPU1的高速缓存中，然后赋值为10，那么在CPU1的高速缓存当中i的值变为10了，却没有立即写入到主存当中。</p>
+<p>此时线程2执行 j = i，它会先去主存读取i的值并加载到CPU2的缓存当中，注意此时内存当中i的值还是0，那么就会使得j的值为0，而不是10.</p>
+<p>这就是可见性问题，线程1对变量i修改了之后，线程2没有立即看到线程1修改的值。</p>
+<h2 id="有序性"><a href="#有序性" class="headerlink" title="有序性"></a>有序性</h2><p>有序性：即程序执行的顺序按照代码的先后顺序执行。举个简单的例子，看下面这段代码：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> i = <span class="number">0</span>;              </span><br><span class="line"><span class="keyword">boolean</span> flag = <span class="keyword">false</span>;</span><br><span class="line">i = <span class="number">1</span>;                <span class="comment">//语句1  </span></span><br><span class="line">flag = <span class="keyword">true</span>;          <span class="comment">//语句2</span></span><br></pre></td></tr></table></figure></p>
+<p>上面代码定义了一个int型变量，定义了一个boolean类型变量，然后分别对两个变量进行赋值操作。从代码顺序上看，语句1是在语句2前面的，那么JVM在真正执行这段代码的时候会保证语句1一定会在语句2前面执行吗？不一定，为什么呢？这里可能会发生指令重排序（Instruction Reorder）。</p>
+<p>下面解释一下什么是指令重排序，一般来说，处理器为了提高程序运行效率，可能会对输入代码进行优化，它不保证程序中各个语句的执行先后顺序同代码中的顺序一致，但是它会保证程序最终执行结果和代码顺序执行的结果是一致的。</p>
+<p>比如上面的代码中，语句1和语句2谁先执行对最终的程序结果并没有影响，那么就有可能在执行过程中，语句2先执行而语句1后执行。</p>
+<p>但是要注意，虽然处理器会对指令进行重排序，但是它会保证程序最终结果会和代码顺序执行结果相同，那么它靠什么保证的呢？再看下面一个例子：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> a = <span class="number">10</span>;    <span class="comment">//语句1</span></span><br><span class="line"><span class="keyword">int</span> r = <span class="number">2</span>;    <span class="comment">//语句2</span></span><br><span class="line">a = a + <span class="number">3</span>;    <span class="comment">//语句3</span></span><br><span class="line">r = a*a;     <span class="comment">//语句4</span></span><br></pre></td></tr></table></figure></p>
+<p>那么可不可能是这个执行顺序呢： 语句2   语句1    语句4   语句3</p>
+<p>不可能，因为处理器在进行重排序时是会考虑指令之间的数据依赖性，如果一个指令Instruction 2必须用到Instruction 1的结果，那么处理器会保证Instruction 1会在Instruction 2之前执行。</p>
+<p>虽然重排序不会影响单个线程内程序执行的结果，但是多线程呢？下面看一个例子：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//线程1:</span></span><br><span class="line">context = loadContext();   <span class="comment">//语句1</span></span><br><span class="line">inited = <span class="keyword">true</span>;             <span class="comment">//语句2</span></span><br><span class="line"> </span><br><span class="line"><span class="comment">//线程2:</span></span><br><span class="line"><span class="keyword">while</span>(!inited )&#123;</span><br><span class="line">  sleep()</span><br><span class="line">&#125;</span><br><span class="line">doSomethingwithconfig(context);</span><br></pre></td></tr></table></figure></p>
+<p>上面代码中，由于语句1和语句2没有数据依赖性，因此可能会被重排序。假如发生了重排序，在线程1执行过程中先执行语句2，而此是线程2会以为初始化工作已经完成，那么就会跳出while循环，去执行doSomethingwithconfig(context)方法，而此时context并没有被初始化，就会导致程序出错。</p>
+<p>从上面可以看出，指令重排序不会影响单个线程的执行，但是会影响到线程并发执行的正确性。</p>
+<p>也就是说，要想并发程序正确地执行，必须要保证原子性、可见性以及有序性。只要有一个没有被保证，就有可能会导致程序运行不正确。</p>
+<h1 id="Java内存模型"><a href="#Java内存模型" class="headerlink" title="Java内存模型"></a>Java内存模型</h1><p>在前面谈到了一些关于内存模型以及并发编程中可能会出现的一些问题。下面我们来看一下Java内存模型，研究一下Java内存模型为我们提供了哪些保证以及在java中提供了哪些方法和机制来让我们在进行多线程编程时能够保证程序执行的正确性。</p>
+<p>在Java虚拟机规范中试图定义一种Java内存模型（Java Memory Model，JMM）来屏蔽各个硬件平台和操作系统的内存访问差异，以实现让Java程序在各种平台下都能达到一致的内存访问效果。那么Java内存模型规定了哪些东西呢，它定义了程序中变量的访问规则，往大一点说是定义了程序执行的次序。注意，为了获得较好的执行性能，Java内存模型并没有限制执行引擎使用处理器的寄存器或者高速缓存来提升指令执行速度，也没有限制编译器对指令进行重排序。也就是说，在java内存模型中，也会存在缓存一致性问题和指令重排序的问题。</p>
+<p>Java内存模型规定所有的变量都是存在主存当中（类似于前面说的物理内存），每个线程都有自己的工作内存（类似于前面的高速缓存）。线程对变量的所有操作都必须在工作内存中进行，而不能直接对主存进行操作。并且每个线程不能访问其他线程的工作内存。</p>
+<p>举个简单的例子：在java中，执行下面这个语句：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">i  = <span class="number">10</span>;</span><br></pre></td></tr></table></figure></p>
+<p>执行线程必须先在自己的工作线程中对变量i所在的缓存行进行赋值操作，然后再写入主存当中。而不是直接将数值10写入主存当中。</p>
+<p>那么Java语言 本身对 原子性、可见性以及有序性提供了哪些保证呢？</p>
+<h2 id="原子性-1"><a href="#原子性-1" class="headerlink" title="原子性"></a>原子性</h2><p>在Java中，对基本数据类型的变量的读取和赋值操作是原子性操作，即这些操作是不可被中断的，要么执行，要么不执行。</p>
+<p>上面一句话虽然看起来简单，但是理解起来并不是那么容易。看下面一个例子i：</p>
+<p>请分析以下哪些操作是原子性操作：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">x = <span class="number">10</span>;         <span class="comment">//语句1</span></span><br><span class="line">y = x;         <span class="comment">//语句2</span></span><br><span class="line">x++;           <span class="comment">//语句3</span></span><br><span class="line">x = x + <span class="number">1</span>;     <span class="comment">//语句4</span></span><br></pre></td></tr></table></figure></p>
+<p>咋一看，有些朋友可能会说上面的4个语句中的操作都是原子性操作。其实只有语句1是原子性操作，其他三个语句都不是原子性操作。</p>
+<p>语句1是直接将数值10赋值给x，也就是说线程执行这个语句的会直接将数值10写入到工作内存中。</p>
+<p>语句2实际上包含2个操作，它先要去读取x的值，再将x的值写入工作内存，虽然读取x的值以及 将x的值写入工作内存 这2个操作都是原子性操作，但是合起来就不是原子性操作了。</p>
+<p>同样的，x++和 x = x+1包括3个操作：读取x的值，进行加1操作，写入新的值。</p>
+<p> 所以上面4个语句只有语句1的操作具备原子性。</p>
+<p>也就是说，只有简单的读取、赋值（而且必须是将数字赋值给某个变量，变量之间的相互赋值不是原子操作）才是原子操作。</p>
+<p>不过这里有一点需要注意：在32位平台下，对64位数据的读取和赋值是需要通过两个操作来完成的，不能保证其原子性。但是好像在最新的JDK中，JVM已经保证对64位数据的读取和赋值也是原子性操作了。</p>
+<p>从上面可以看出，Java内存模型只保证了基本读取和赋值是原子性操作，如果要实现更大范围操作的原子性，可以通过synchronized和Lock来实现。由于synchronized和Lock能够保证任一时刻只有一个线程执行该代码块，那么自然就不存在原子性问题了，从而保证了原子性。</p>
+<h2 id="可见性-1"><a href="#可见性-1" class="headerlink" title="可见性"></a>可见性</h2><p>对于可见性，Java提供了volatile关键字来保证可见性。</p>
+<p>当一个共享变量被volatile修饰时，它会保证修改的值会立即被更新到主存，当有其他线程需要读取时，它会去内存中读取新值。</p>
+<p>而普通的共享变量不能保证可见性，因为普通共享变量被修改之后，什么时候被写入主存是不确定的，当其他线程去读取时，此时内存中可能还是原来的旧值，因此无法保证可见性。</p>
+<p>另外，通过synchronized和Lock也能够保证可见性，synchronized和Lock能保证同一时刻只有一个线程获取锁然后执行同步代码，并且在释放锁之前会将对变量的修改刷新到主存当中。因此可以保证可见性。</p>
+<h2 id="有序性-1"><a href="#有序性-1" class="headerlink" title="有序性"></a>有序性</h2><p>在Java内存模型中，允许编译器和处理器对指令进行重排序，但是重排序过程不会影响到单线程程序的执行，却会影响到多线程并发执行的正确性。</p>
+<p>在Java里面，可以通过volatile关键字来保证一定的“有序性”（具体原理在下一节讲述）。另外可以通过synchronized和Lock来保证有序性，很显然，synchronized和Lock保证每个时刻是有一个线程执行同步代码，相当于是让线程顺序执行同步代码，自然就保证了有序性。</p>
+<p>另外，Java内存模型具备一些先天的“有序性”，即不需要通过任何手段就能够得到保证的有序性，这个通常也称为 happens-before 原则。如果两个操作的执行次序无法从happens-before原则推导出来，那么它们就不能保证它们的有序性，虚拟机可以随意地对它们进行重排序。</p>
+<p>下面就来具体介绍下happens-before原则（先行发生原则）：</p>
+<ul>
+<li>程序次序规则：一个线程内，按照代码顺序，书写在前面的操作先行发生于书写在后面的操作</li>
+<li>锁定规则：一个unLock操作先行发生于后面对同一个锁额lock操作</li>
+<li>volatile变量规则：对一个变量的写操作先行发生于后面对这个变量的读操作</li>
+<li>传递规则：如果操作A先行发生于操作B，而操作B又先行发生于操作C，则可以得出操作A先行发生于操作C</li>
+<li>线程启动规则：Thread对象的start()方法先行发生于此线程的每个一个动作</li>
+<li>线程中断规则：对线程interrupt()方法的调用先行发生于被中断线程的代码检测到中断事件的发生</li>
+<li>线程终结规则：线程中所有的操作都先行发生于线程的终止检测，我们可以通过Thread.join()方法结束、Thread.isAlive()的返回值手段检测到线程已经终止执行</li>
+<li>对象终结规则：一个对象的初始化完成先行发生于他的finalize()方法的开始<br>这8条原则摘自《深入理解Java虚拟机》。</li>
+</ul>
+<p>这8条规则中，前4条规则是比较重要的，后4条规则都是显而易见的。</p>
+<p>下面我们来解释一下前4条规则：</p>
+<p>对于程序次序规则来说，我的理解就是一段程序代码的执行在单个线程中看起来是有序的。注意，虽然这条规则中提到“书写在前面的操作先行发生于书写在后面的操作”，这个应该是程序看起来执行的顺序是按照代码顺序执行的，因为虚拟机可能会对程序代码进行指令重排序。虽然进行重排序，但是最终执行的结果是与程序顺序执行的结果一致的，它只会对不存在数据依赖性的指令进行重排序。因此，在单个线程中，程序执行看起来是有序执行的，这一点要注意理解。事实上，这个规则是用来保证程序在单线程中执行结果的正确性，但无法保证程序在多线程中执行的正确性。</p>
+<p>第二条规则也比较容易理解，也就是说无论在单线程中还是多线程中，同一个锁如果出于被锁定的状态，那么必须先对锁进行了释放操作，后面才能继续进行lock操作。</p>
+<p>第三条规则是一条比较重要的规则，也是后文将要重点讲述的内容。直观地解释就是，如果一个线程先去写一个变量，然后一个线程去进行读取，那么写入操作肯定会先行发生于读操作。</p>
+<p>第四条规则实际上就是体现happens-before原则具备传递性。</p>
+<h1 id="深入剖析volatile关键字"><a href="#深入剖析volatile关键字" class="headerlink" title="深入剖析volatile关键字"></a>深入剖析volatile关键字</h1><p>在前面讲述了很多东西，其实都是为讲述volatile关键字作铺垫，那么接下来我们就进入主题。</p>
+<h2 id="volatile关键字的两层语义"><a href="#volatile关键字的两层语义" class="headerlink" title="volatile关键字的两层语义"></a>volatile关键字的两层语义</h2><p>一旦一个共享变量（类的成员变量、类的静态成员变量）被volatile修饰之后，那么就具备了两层语义：</p>
+<ol>
+<li><p>保证了不同线程对这个变量进行操作时的可见性，即一个线程修改了某个变量的值，这新值对其他线程来说是立即可见的。</p>
+</li>
+<li><p>禁止进行指令重排序。</p>
+</li>
+</ol>
+<p>先看一段代码，假如线程1先执行，线程2后执行：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//线程1</span></span><br><span class="line"><span class="keyword">boolean</span> stop = <span class="keyword">false</span>;</span><br><span class="line"><span class="keyword">while</span>(!stop)&#123;</span><br><span class="line">    doSomething();</span><br><span class="line">&#125;</span><br><span class="line"> </span><br><span class="line"><span class="comment">//线程2</span></span><br><span class="line">stop = <span class="keyword">true</span>;</span><br></pre></td></tr></table></figure></p>
+<p>这段代码是很典型的一段代码，很多人在中断线程时可能都会采用这种标记办法。但是事实上，这段代码会完全运行正确么？即一定会将线程中断么？不一定，也许在大多数时候，这个代码能够把线程中断，但是也有可能会导致无法中断线程（虽然这个可能性很小，但是只要一旦发生这种情况就会造成死循环了）。</p>
+<p>下面解释一下这段代码为何有可能导致无法中断线程。在前面已经解释过，每个线程在运行过程中都有自己的工作内存，那么线程1在运行的时候，会将stop变量的值拷贝一份放在自己的工作内存当中。</p>
+<p>那么当线程2更改了stop变量的值之后，但是还没来得及写入主存当中，线程2转去做其他事情了，那么线程1由于不知道线程2对stop变量的更改，因此还会一直循环下去。</p>
+<p>但是用volatile修饰之后就变得不一样了：</p>
+<ol>
+<li><p>使用volatile关键字会强制将修改的值立即写入主存；</p>
+</li>
+<li><p>使用volatile关键字的话，当线程2进行修改时，会导致线程1的工作内存中缓存变量stop的缓存行无效（反映到硬件层的话，就是CPU的L1或者L2缓存中对应的缓存行无效）；</p>
+</li>
+<li><p>由于线程1的工作内存中缓存变量stop的缓存行无效，所以线程1再次读取变量stop的值时会去主存读取。</p>
+</li>
+</ol>
+<p>那么在线程2修改stop值时（当然这里包括2个操作，修改线程2工作内存中的值，然后将修改后的值写入内存），会使得线程1的工作内存中缓存变量stop的缓存行无效，然后线程1读取时，发现自己的缓存行无效，它会等待缓存行对应的主存地址被更新之后，然后去对应的主存读取最新的值。</p>
+<p>那么线程1读取到的就是最新的正确的值。</p>
+<h2 id="volatile保证原子性吗？"><a href="#volatile保证原子性吗？" class="headerlink" title="volatile保证原子性吗？"></a>volatile保证原子性吗？</h2><p>在Sun的JDK官方文档是这样形容volatile的：</p>
+<blockquote>
+<p>The Java programming language provides a second mechanism, volatile fields, that is more convenient than locking for some purposes. A field may be declared volatile, in which case the Java Memory Model ensures that all threads see a consistent value for the variable.</p>
+</blockquote>
+<p>意思就是说，如果一个变量加了volatile关键字，就会告诉编译器和JVM的内存模型：这个变量是对所有线程共享的、可见的，每次jvm都会读取最新写入的值并使其最新值在所有CPU可见。volatile似乎是有时候可以代替简单的锁，似乎加了volatile关键字就省掉了锁。但又说volatile不能保证原子性（java程序员很熟悉这句话：volatile仅仅用来保证该变量对所有线程的可见性，但不保证原子性）。这不是互相矛盾吗？</p>
+<p>例如让一个volatile的integer自增（i++），其实要分成3步：1）读取volatile变量值到local； 2）增加变量的值；3）把local的值写回，让其它的线程可见。这3步的jvm指令为：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mov    0xc(%r10),%r8d ; Load</span><br><span class="line">inc    %r8d           ; Increment</span><br><span class="line">mov    %r8d,0xc(%r10) ; Store</span><br><span class="line">lock addl $0x0,(%rsp) ; StoreLoad Barrier</span><br></pre></td></tr></table></figure></p>
+<p><strong>这里load和store中的0xc(%r10)地址我的理解是CPU缓存中的地址而不是实际的内存地址。</strong></p>
+<p>注意最后一步是内存屏障。</p>
+<hr>
+<p>内存屏障（memory barrier）是一个CPU指令。基本上，它是这样一条指令： a) 确保一些特定操作执行的顺序； b) 影响一些数据的可见性(可能是某些指令执行后的结果)。编译器和CPU可以在保证输出结果一样的情况下对指令重排序，使性能得到优化。插入一个内存屏障，相当于告诉CPU和编译器先于这个命令的必须先执行，后于这个命令的必须后执行。内存屏障另一个作用是强制更新一次不同CPU的缓存。例如，一个写屏障会把这个屏障前写入的数据刷新到缓存，这样任何试图读取该数据的线程将得到最新值，而不用考虑到底是被哪个cpu核心或者哪颗CPU执行的。</p>
+<hr>
+<p>内存屏障（memory barrier）和volatile什么关系？上面的虚拟机指令里面有提到，如果你的字段是volatile，Java内存模型将在写操作后插入一个写屏障指令，在读操作前插入一个读屏障指令。这意味着如果你对一个volatile字段进行写操作，你必须知道：1、一旦你完成写入，任何访问这个字段的线程将会得到最新的值。2、在你写入前，会保证所有之前发生的事已经发生，并且任何更新过的数据值也是可见的，因为内存屏障会把之前的写入值都刷新到缓存。</p>
+<p>明白了内存屏障（memory barrier）这个CPU指令，回到前面的JVM指令：从Load到store到内存屏障，一共4步，其中最后一步jvm让这个最新的变量的值在所有线程可见，也就是最后一步让所有的CPU内核都获得了最新的值，但中间的几步（从Load到Store）是不安全的，中间如果其他的CPU修改了值将会丢失。</p>
+<p>再举一个例子：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">Test</span> </span>&#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">volatile</span> <span class="keyword">int</span> inc = <span class="number">0</span>;</span><br><span class="line">     </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">increase</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        inc++;</span><br><span class="line">    &#125;</span><br><span class="line">     </span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">final</span> Test test = <span class="keyword">new</span> Test();</span><br><span class="line">        <span class="keyword">for</span>(<span class="keyword">int</span> i=<span class="number">0</span>;i&lt;<span class="number">10</span>;i++)&#123;</span><br><span class="line">            <span class="keyword">new</span> Thread()&#123;</span><br><span class="line">                <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">                    <span class="keyword">for</span>(<span class="keyword">int</span> j=<span class="number">0</span>;j&lt;<span class="number">1000</span>;j++)</span><br><span class="line">                        test.increase();</span><br><span class="line">                &#125;;</span><br><span class="line">            &#125;.start();</span><br><span class="line">        &#125;</span><br><span class="line">         </span><br><span class="line">        <span class="keyword">while</span>(Thread.activeCount()&gt;<span class="number">1</span>)  <span class="comment">//保证前面的线程都执行完</span></span><br><span class="line">            Thread.yield();</span><br><span class="line">        System.out.println(test.inc);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>大家想一下这段程序的输出结果是多少？也许有些朋友认为是10000。但是事实上运行它会发现每次运行结果都不一致，都是一个小于10000的数字。</p>
+<p>可能有的朋友就会有疑问，不对啊，上面是对变量inc进行自增操作，由于volatile保证了可见性，那么在每个线程中对inc自增完之后，在其他线程中都能看到修改后的值啊，所以有10个线程分别进行了1000次操作，那么最终inc的值应该是1000*10=10000。</p>
+<p>这里面就有一个误区了，volatile关键字能保证可见性没有错，但是上面的程序错在没能保证原子性。可见性只能保证每次读取的是最新的值，但是volatile没办法保证对变量的操作的原子性。</p>
+<p>在前面已经提到过，自增操作是不具备原子性的，它包括读取变量的原始值、进行加1操作、写入工作内存。那么就是说自增操作的三个子操作可能会分割开执行，就有可能导致下面这种情况出现：</p>
+<p>假如某个时刻变量inc的值为10，</p>
+<p>线程1对变量进行自增操作，线程1先读取了变量inc的原始值，然后线程1被阻塞了；</p>
+<p>然后线程2对变量进行自增操作，线程2也去读取变量inc的原始值，由于线程1只是对变量inc进行读取操作，而没有对变量进行修改操作，所以不会导致线程2的工作内存中缓存变量inc的缓存行无效，所以线程2会直接去主存读取inc的值，发现inc的值时10，然后进行加1操作，并把11写入工作内存，最后写入主存。</p>
+<p>然后线程1接着进行加1操作，由于已经读取了inc的值，注意此时在线程1的工作内存中inc的值仍然为10，所以线程1对inc进行加1操作后inc的值为11，然后将11写入工作内存，最后写入主存。</p>
+<p>那么两个线程分别进行了一次自增操作后，inc只增加了1。</p>
+<p>解释到这里，可能有朋友会有疑问，不对啊，前面不是保证一个变量在修改volatile变量时，会让缓存行无效吗？然后其他线程去读就会读到新的值，对，这个没错。这个就是上面的happens-before规则中的volatile变量规则，但是要注意，线程1对变量进行读取和自增操作之后，被阻塞了的话，并没有将incr中的计算值刷新到内存中，也就没有使得其他缓存行失效。后面线程2对变量inc的值读取是从内存中读取的，并且修改后保存到内存使得其他缓存行失效。由于线程1之前已经获取了inc的值并进行操作，只是没有刷新到内存，所以线程1并不会重新从内存中读取最新值。这样，在线程1将计算结果刷新到内存后，就会造成线程2的自增操作无效了。</p>
+<p>根源就在这里，自增操作不是原子性操作，而且volatile也无法保证对变量的任何操作都是原子性的。</p>
+<p>在java 1.5的java.util.concurrent.atomic包下提供了一些原子操作类，即对基本数据类型的 自增（加1操作），自减（减1操作）、以及加法操作（加一个数），减法操作（减一个数）进行了封装，保证这些操作是原子性操作。atomic是利用CAS来实现原子性操作的（Compare And Swap），CAS实际上是利用处理器提供的CMPXCHG指令实现的，而处理器执行CMPXCHG指令是一个原子性操作。</p>
+<h2 id="volatile能保证有序性吗？"><a href="#volatile能保证有序性吗？" class="headerlink" title="volatile能保证有序性吗？"></a>volatile能保证有序性吗？</h2><p>在前面提到volatile关键字能禁止指令重排序，所以volatile能在一定程度上保证有序性。</p>
+<p>volatile关键字禁止指令重排序有两层意思：</p>
+<p>1）当程序执行到volatile变量的读操作或者写操作时，在其前面的操作的更改肯定全部已经进行，且结果已经对后面的操作可见；在其后面的操作肯定还没有进行；</p>
+<p>2）在进行指令优化时，不能将在对volatile变量访问的语句放在其后面执行，也不能把volatile变量后面的语句放到其前面执行。</p>
+<p>可能上面说的比较绕，举个简单的例子：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//x、y为非volatile变量</span></span><br><span class="line"><span class="comment">//flag为volatile变量</span></span><br><span class="line"> </span><br><span class="line">x = <span class="number">2</span>;        <span class="comment">//语句1</span></span><br><span class="line">y = <span class="number">0</span>;        <span class="comment">//语句2</span></span><br><span class="line">flag = <span class="keyword">true</span>;  <span class="comment">//语句3</span></span><br><span class="line">x = <span class="number">4</span>;         <span class="comment">//语句4</span></span><br><span class="line">y = -<span class="number">1</span>;       <span class="comment">//语句5</span></span><br></pre></td></tr></table></figure></p>
+<p>由于flag变量为volatile变量，那么在进行指令重排序的过程的时候，不会将语句3放到语句1、语句2前面，也不会讲语句3放到语句4、语句5后面。但是要注意语句1和语句2的顺序、语句4和语句5的顺序是不作任何保证的。</p>
+<p>并且volatile关键字能保证，执行到语句3时，语句1和语句2必定是执行完毕了的，且语句1和语句2的执行结果对语句3、语句4、语句5是可见的。</p>
+<p>那么我们回到前面举的一个例子：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//线程1:</span></span><br><span class="line">context = loadContext();   <span class="comment">//语句1</span></span><br><span class="line">inited = <span class="keyword">true</span>;             <span class="comment">//语句2</span></span><br><span class="line"> </span><br><span class="line"><span class="comment">//线程2:</span></span><br><span class="line"><span class="keyword">while</span>(!inited )&#123;</span><br><span class="line">  sleep()</span><br><span class="line">&#125;</span><br><span class="line">doSomethingwithconfig(context);</span><br></pre></td></tr></table></figure></p>
+<p>前面举这个例子的时候，提到有可能语句2会在语句1之前执行，那么久可能导致context还没被初始化，而线程2中就使用未初始化的context去进行操作，导致程序出错。</p>
+<p>这里如果用volatile关键字对inited变量进行修饰，就不会出现这种问题了，因为当执行到语句2时，必定能保证context已经初始化完毕。</p>
+<h2 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h2><p><a href="https://www.cnblogs.com/dolphin0520/p/3920373.html#!comments" target="_blank" rel="noopener">https://www.cnblogs.com/dolphin0520/p/3920373.html#!comments</a></p>
+<p><a href="https://www.cnblogs.com/Mainz/p/3556430.html" target="_blank" rel="noopener">https://www.cnblogs.com/Mainz/p/3556430.html</a></p>
+
+          
+        
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+      
+    
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2019/07/17/数据库事务的4种隔离级别/">
 
     <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
@@ -2916,250 +3235,13 @@
 
 
     
-      
-
-  
-
-  
-  
-  
-
-  
-
-  <article class="post post-type-normal" itemscope="" itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="https://zhuangyongxin.github.io/2018/12/24/Spring-Cloud-Eureka原理详解/">
-
-    <span hidden itemprop="author" itemscope="" itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Vincent Zhuang">
-      <meta itemprop="description" content="专注于后端的技术博客">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope="" itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Vincent Blogs">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                
-                <a href="/2018/12/24/Spring-Cloud-Eureka原理详解/" class="post-title-link" itemprop="url">Spring Cloud Eureka原理详解</a>
-              
-            
-          </h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-
-            
-            
-            
-
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-
-              
-                
-              
-
-              <time title="创建时间：2018-12-24 19:56:55" itemprop="dateCreated datePublished" datetime="2018-12-24T19:56:55+08:00">2018-12-24</time>
-            
-
-            
-              
-
-              
-                
-                <span class="post-meta-divider">|</span>
-                
-
-                <span class="post-meta-item-icon">
-                  <i class="fa fa-calendar-check-o"></i>
-                </span>
-                
-                  <span class="post-meta-item-text">更新于</span>
-                
-                <time title="修改时间：2019-01-02 20:38:26" itemprop="dateModified" datetime="2019-01-02T20:38:26+08:00">2019-01-02</time>
-              
-            
-          </span>
-
-          
-            <span class="post-category">
-            
-              <span class="post-meta-divider">|</span>
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-folder-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">分类于</span>
-              
-              
-                <span itemprop="about" itemscope="" itemtype="http://schema.org/Thing"><a href="/categories/Spring-Cloud/" itemprop="url" rel="index"><span itemprop="name">Spring Cloud</span></a></span>
-
-                
-                
-              
-            </span>
-          
-
-          
-            
-          
-
-          
-          
-             <span id="/2018/12/24/Spring-Cloud-Eureka原理详解/" class="leancloud_visitors" data-flag-title="Spring Cloud Eureka原理详解">
-               <span class="post-meta-divider">|</span>
-               <span class="post-meta-item-icon">
-                 <i class="fa fa-eye"></i>
-               </span>
-               
-                 <span class="post-meta-item-text">阅读次数：</span>
-               
-                 <span class="leancloud-visitors-count"></span>
-             </span>
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          
-            <p>传统的单体平台架构会随着业务发展而变得越来越臃肿，越来越难维护，这时候微服务架构应运而生，他的理念是将庞大的单体应用进行功能拆分，形成多个微服务，各个服务间都是独立解构的，从而解决单体应用在团队开发、维护上的问题。目前，微服务架构已经广泛应用在互联网行业。<br><br>在微服务框架上，Spring Cloud 可以说是当前最为流行的框架。Spring Cloud 包含了一整套的组件，涵盖微服务框架上的各个方面。由于Spring Cloud 的使用在网上都有较为全面的教程，因此，本文重点讲解常用组件的原理。为了避免读者觉得枯燥，我就从典型的电商场景来讲。</p>
-<h1 id="业务场景"><a href="#业务场景" class="headerlink" title="业务场景"></a>业务场景</h1><p>假设我们要开发一个电商平台，可以实现用户下单支付并且发货的功能。那么我们需要有一个<strong>订单服务，支付服务，库存服务、仓储服务、积分服务</strong>（实际电商平台肯定不止这几个哈），下定支付的业务流程是这样的：</p>
-<ul>
-<li>查询库存服务获取商品库存</li>
-<li>商品有库存，去订单服务下订单</li>
-<li>下定成功后，支付服务执行支付</li>
-<li>支付完成后，订单服务、库存服务更新状态</li>
-<li>积分服务完成相应功能</li>
-<li>仓储服务执行发货</li>
-</ul>
-<h1 id="Spring-Cloud-Eureka"><a href="#Spring-Cloud-Eureka" class="headerlink" title="Spring Cloud Eureka"></a>Spring Cloud Eureka</h1><p>在上面的业务场景中，假如支付服务完成相关操作后，想要调用订单服务，库存服务执行相关更新操作，该如何调用呢？我们连订单服务、库存服务的地址都不知道。这时候，就需要用到服务注册中心了。<br><br>在微服务框架中，最为重要的莫过于服务注册中心，可以理解为它是所有服务的中枢，负责服务的注册及服务间发现。有了它，微服务间才能够互相访问。而在Spring Cloud Eureka就是这样一个核心组件。<br></p>
-<h2 id="服务注册"><a href="#服务注册" class="headerlink" title="服务注册"></a>服务注册</h2><p>在Spring Cloud的服务治理框架中，每个服务都有一个Eureka Client组件，他们通过Rest请求的方式向注册中心Eureka Server进行注册，并将自己的服务名、主机ip、端口号等一些信息发送给注册中心，注册中心再按服务名分类组织并维护服务清单。<br><br>服务在注册后，注册中心会维护一个注册表，那注册表究竟是怎么样的呢？接下来我们就看看源码</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">abstract</span> <span class="class"><span class="keyword">class</span> <span class="title">AbstractInstanceRegistry</span> <span class="keyword">implements</span> <span class="title">InstanceRegistry</span> </span>&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> Logger logger = LoggerFactory.getLogger(AbstractInstanceRegistry.class);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> String[] EMPTY_STR_ARRAY = <span class="keyword">new</span> String[<span class="number">0</span>];</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ConcurrentHashMap&lt;String, Map&lt;String, Lease&lt;InstanceInfo&gt;&gt;&gt; registry</span><br><span class="line">            = <span class="keyword">new</span> ConcurrentHashMap&lt;String, Map&lt;String, Lease&lt;InstanceInfo&gt;&gt;&gt;();</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
-<p>可以看到，如上图所示，图中这个名字叫做registry的CocurrentHashMap，就是注册表的核心结构。不了解CocurrentHashMap的话可以查看<a href="http://www.importnew.com/28263.html" target="_blank" rel="noopener">Java7/8 中的 HashMap 和 ConcurrentHashMap 全解析</a>，<br><br>从代码中可以看到，Eureka Server的注册表直接基于纯内存，即在内存里维护了一个数据结构。各个服务的注册、服务下线、服务故障，全部会在内存里维护和更新这个注册表。维护注册表、拉取注册表、更新心跳时间，全部发生在内存里！这是Eureka Server非常核心的一个点。<br><br>搞清楚了这个，咱们再来分析一下registry这个东西的数据结构.</p>
-<ul>
-<li>首先，这个ConcurrentHashMap的key就是服务名称，比如“inventory-service”，就是一个服务名称。</li>
-<li>value则代表了一个服务的多个服务实例。</li>
-<li>举例：“inventory-service”是可以有3个服务实例的，每个服务实例部署在一台机器上。</li>
-</ul>
-<p>再来看看作为value的这个Map：Map&lt;String, Lease<instanceinfo>&gt;<br><br>这个Map的key就是服务实例的idvalue是一个叫做Lease的类，它的泛型是一个叫做InstanceInfo的东东首先说下InstanceInfo，这个InstanceInfo是什么呢？</instanceinfo></p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">InstanceInfo</span> </span>&#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> DEFAULT_PORT = <span class="number">7001</span>;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> DEFAULT_SECURE_PORT = <span class="number">7002</span>;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> DEFAULT_COUNTRY_ID = <span class="number">1</span>; <span class="comment">// US</span></span><br><span class="line"></span><br><span class="line">    <span class="comment">// The (fixed) instanceId for this instanceInfo. This should be unique within the scope of the appName.</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> String instanceId;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> String appName;</span><br><span class="line">    <span class="meta">@Auto</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> String appGroupName;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> String ipAddr;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">final</span> String SID_DEFAULT = <span class="string">"na"</span>;</span><br><span class="line">    <span class="meta">@Deprecated</span></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> String sid = SID_DEFAULT;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> <span class="keyword">int</span> port = DEFAULT_PORT;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">volatile</span> <span class="keyword">int</span> securePort = DEFAULT_SECURE_PORT;</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
-<p>通过源码可以看到，这个InstanceInfo就代表了服务实例的详细信息，比如实例id、ip地址、端口号等。<br><br>而这个Lease，里面则会维护每个服务的注册时间、启动时间以及最近一次的服务续约时间（也就是发送心跳的时间）</p>
-<h2 id="服务获取"><a href="#服务获取" class="headerlink" title="服务获取"></a>服务获取</h2><p>假如订单服务或者仓储服务有一台机器奔溃了，那么如果后续继续向那台机器调用服务的话，肯定会失败的。要避免这种情况就必须要定时更新各个服务的清单，保证服务清单中的机器都是健康的。<br>在Eureka中，每个注册到注册中心的Eureka Client都需要定时向Eureka Server发送Rest请求，获取全量的服务清单。</p>
-<ul>
-<li>如果想要定时获取服务，必须保证Eureka Client中的eureka.client.fetch-registery = true，该值默认为true</li>
-<li>如果希望修改缓存清单的更新时间，可通过修改Eureka Client中的eureka.client.registry-fetch-interval-seconds参数，默认值为30秒</li>
-</ul>
-<p>说到服务获取，可以还得再提一下Eureka Server的在服务清单获取上的多级缓存机制，这是为了提高并发访问性能而设计的。</p>
-<ul>
-<li><p>一级缓存<strong>ReadOnlyCacheMap</strong>，通过ConcurrentMapl来实现。通过定时任务，根据时间间隔<strong>responseCacheUpdateIntervalMs</strong>(默认为30秒)从ReadWriteCacheMap中加载新数据</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">ResponseCacheImpl</span> <span class="keyword">implements</span> <span class="title">ResponseCache</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    ......</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> ConcurrentMap&lt;Key, Value&gt; readOnlyCacheMap = <span class="keyword">new</span> ConcurrentHashMap&lt;Key, Value&gt;();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> LoadingCache&lt;Key, Value&gt; readWriteCacheMap;</span><br><span class="line">    ......</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>二级缓存<strong>ReadWriteCacheMap</strong>,通过Google的Gauva cache来实现。同样是通过定时任务，根据时间间隔<strong>responseCacheAutoExpirationInSeconds(默认为180秒)</strong>从上文讲到的registry中获取最新数据</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">ResponseCacheImpl</span> <span class="keyword">implements</span> <span class="title">ResponseCache</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    ......</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> LoadingCache&lt;Key, Value&gt; readWriteCacheMap;</span><br><span class="line">    ......</span><br><span class="line"></span><br><span class="line">    ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) &#123;</span><br><span class="line">        <span class="keyword">this</span>.serverConfig = serverConfig;</span><br><span class="line">        <span class="keyword">this</span>.serverCodecs = serverCodecs;</span><br><span class="line">        <span class="keyword">this</span>.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();</span><br><span class="line">        <span class="keyword">this</span>.registry = registry;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">long</span> responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();</span><br><span class="line">        <span class="keyword">this</span>.readWriteCacheMap =</span><br><span class="line">                CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())</span><br><span class="line">                        .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)</span><br><span class="line">                        .removalListener(<span class="keyword">new</span> RemovalListener&lt;Key, Value&gt;() &#123;</span><br><span class="line">                            <span class="meta">@Override</span></span><br><span class="line">                            <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">onRemoval</span><span class="params">(RemovalNotification&lt;Key, Value&gt; notification)</span> </span>&#123;</span><br><span class="line">                                Key removedKey = notification.getKey();</span><br><span class="line">                                <span class="keyword">if</span> (removedKey.hasRegions()) &#123;</span><br><span class="line">                                    Key cloneWithNoRegions = removedKey.cloneWithoutRegions();</span><br><span class="line">                                    regionSpecificKeys.remove(cloneWithNoRegions, removedKey);</span><br><span class="line">                                &#125;</span><br><span class="line">                            &#125;</span><br><span class="line">                        &#125;)</span><br><span class="line">                        .build(<span class="keyword">new</span> CacheLoader&lt;Key, Value&gt;() &#123;</span><br><span class="line">                            <span class="meta">@Override</span></span><br><span class="line">                            <span class="function"><span class="keyword">public</span> Value <span class="title">load</span><span class="params">(Key key)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">                                <span class="keyword">if</span> (key.hasRegions()) &#123;</span><br><span class="line">                                    Key cloneWithNoRegions = key.cloneWithoutRegions();</span><br><span class="line">                                    regionSpecificKeys.put(cloneWithNoRegions, key);</span><br><span class="line">                                &#125;</span><br><span class="line">                                Value value = generatePayload(key);</span><br><span class="line">                                <span class="keyword">return</span> value;</span><br><span class="line">                            &#125;</span><br><span class="line">                        &#125;);</span><br><span class="line">    ......</span><br></pre></td></tr></table></figure>
-</li>
-</ul>
-<p>客户端拉取注册表：</p>
-<ul>
-<li>首先从ReadOnlyCacheMap里查缓存的注册表</li>
-<li>如果没有，就找ReadWriteCacheMap里缓存的注册表</li>
-<li>如果还是没有，则会触发Gauva缓存的CacheLoader.load()方法，主要执行了generatePayload()方法从registry拉取数据并写入到ReadWriteCacheMap中</li>
-<li>获取到数据后，写入ReadOnlyCacheMap中并返回</li>
-</ul>
-<h2 id="服务续约"><a href="#服务续约" class="headerlink" title="服务续约"></a>服务续约</h2><p>服务提供者在注册完服务后，需要维护一个心跳用来持续告诉Eureka Server我还活着，防止Eureka Server将该服务实例从可用服务列表中剔除，该动作就叫做<strong>服务续约</strong>。<br><br>关于服务续约有两个重要属性（Eureka Client配置）：</p>
-<ul>
-<li>eureka.instance.lease-renewal-interval-in-seconds，用于定义服务续约的调用间隔时间，也就是定时发送心跳的时间，默认为30秒</li>
-<li>eureka.instance.lease-expiration-duration-in-seconds，用于定义服务失效的时间，超过该时间没有发送心跳给Eureka Server，就会将该服务从服务列表剔除，默认为90秒</li>
-</ul>
-<p>Eureka Server在启动之后会创建一个定时任务，每隔一段时间（默认为60秒）将当前服务注册表中超时（默认为90秒）没有续约的服务剔除。</p>
-<p>接下来我们从源码中来了解服务续约的实现机制：<br><br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Singleton</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">DiscoveryClient</span> <span class="keyword">implements</span> <span class="title">EurekaClient</span> </span>&#123;</span><br><span class="line">    ......</span><br><span class="line">    <span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">initScheduledTasks</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        ......</span><br><span class="line">        <span class="comment">//判断是否应该向Eureka Server注册</span></span><br><span class="line">        <span class="keyword">if</span> (clientConfig.shouldRegisterWithEureka()) &#123;</span><br><span class="line">            <span class="keyword">int</span> renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();</span><br><span class="line">            <span class="keyword">int</span> expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();</span><br><span class="line">            logger.info(<span class="string">"Starting heartbeat executor: "</span> + <span class="string">"renew interval is: &#123;&#125;"</span>, renewalIntervalInSecs);</span><br><span class="line"></span><br><span class="line">            <span class="comment">// Heartbeat timer</span></span><br><span class="line">            scheduler.schedule(</span><br><span class="line">                    <span class="keyword">new</span> TimedSupervisorTask(</span><br><span class="line">                            <span class="string">"heartbeat"</span>,</span><br><span class="line">                            scheduler,</span><br><span class="line">                            heartbeatExecutor,</span><br><span class="line">                            renewalIntervalInSecs,</span><br><span class="line">                            TimeUnit.SECONDS,</span><br><span class="line">                            expBackOffBound,</span><br><span class="line">                            <span class="keyword">new</span> HeartbeatThread()</span><br><span class="line">                    ),</span><br><span class="line">                    renewalIntervalInSecs, TimeUnit.SECONDS);</span><br><span class="line">        ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
-<p>服务续约任务的初始化在DicoveryClient中，可以看到，调度线程池、续约线程池、续约间隔、HeartbeatThread全部封装在了TimedSupervisorTask中，TimedSupervisorTask相当于一个包装类或调度类，封装了续约所需要的全部信息。TimedSupervisorTask内部实现了Runnable接口。<br><br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Singleton</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">DiscoveryClient</span> <span class="keyword">implements</span> <span class="title">EurekaClient</span> </span>&#123;</span><br><span class="line">    ......</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * The heartbeat task that renews the lease in the given intervals.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">private</span> <span class="class"><span class="keyword">class</span> <span class="title">HeartbeatThread</span> <span class="keyword">implements</span> <span class="title">Runnable</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">            <span class="keyword">if</span> (renew()) &#123;</span><br><span class="line">                lastSuccessfulHeartbeatTimestamp = System.currentTimeMillis();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    ......</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * Renew with the eureka service by making the appropriate REST call</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="function"><span class="keyword">boolean</span> <span class="title">renew</span><span class="params">()</span> </span>&#123;</span><br><span class="line">        EurekaHttpResponse&lt;InstanceInfo&gt; httpResponse;</span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            httpResponse = eurekaTransport.registrationClient.sendHeartBeat(instanceInfo.getAppName(), instanceInfo.getId(), instanceInfo, <span class="keyword">null</span>);</span><br><span class="line">            logger.debug(PREFIX + <span class="string">"&#123;&#125; - Heartbeat status: &#123;&#125;"</span>, appPathIdentifier, httpResponse.getStatusCode());</span><br><span class="line">            <span class="keyword">if</span> (httpResponse.getStatusCode() == Status.NOT_FOUND.getStatusCode()) &#123;</span><br><span class="line">                REREGISTER_COUNTER.increment();</span><br><span class="line">                logger.info(PREFIX + <span class="string">"&#123;&#125; - Re-registering apps/&#123;&#125;"</span>, appPathIdentifier, instanceInfo.getAppName());</span><br><span class="line">                <span class="keyword">long</span> timestamp = instanceInfo.setIsDirtyWithTime();</span><br><span class="line">                <span class="keyword">boolean</span> success = register();</span><br><span class="line">                <span class="keyword">if</span> (success) &#123;</span><br><span class="line">                    instanceInfo.unsetIsDirty(timestamp);</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">return</span> success;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">return</span> httpResponse.getStatusCode() == Status.OK.getStatusCode();</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">            logger.error(PREFIX + <span class="string">"&#123;&#125; - was unable to send heartbeat!"</span>, appPathIdentifier, e);</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    ......</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
-<p>续约的具体执行逻辑在renew()方法中，实现较为简单，就是通过Rest请求向Eureka Server发送心跳。</p>
-<p>参考资料:</p>
-<ul>
-<li><a href="https://juejin.im/post/5be13b83f265da6116393fc7" target="_blank" rel="noopener">https://juejin.im/post/5be13b83f265da6116393fc7</a></li>
-<li><a href="https://juejin.im/post/5be3f8dcf265da613a5382ca" target="_blank" rel="noopener">https://juejin.im/post/5be3f8dcf265da613a5382ca</a></li>
-<li><a href="https://blog.csdn.net/u012394095/article/details/80894140" target="_blank" rel="noopener">https://blog.csdn.net/u012394095/article/details/80894140</a></li>
-<li>《Spring Cloud微服务实战》-翟永超著</li>
-</ul>
-
-          
-        
-      
-    </div>
-
-    
-
-    
-    
-    
-
-    
-
-    
-      
-    
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
   </section>
 
   
+  <nav class="pagination">
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="extend next" rel="next" href="/page/2/"><i class="fa fa-angle-right" aria-label="下一页"></i></a>
+  </nav>
+
 
 
           </div>
@@ -3200,7 +3282,7 @@
                 
                   <a href="/archives/">
                 
-                    <span class="site-state-item-count">10</span>
+                    <span class="site-state-item-count">11</span>
                     <span class="site-state-item-name">日志</span>
                   </a>
                 </div>
